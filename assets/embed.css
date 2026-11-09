@@ -113,10 +113,11 @@ html[data-dsh-mode="minimal"][data-dsh-tone="light"] {
   --dsh-min-halo: none;
 }
 
-/* `color-scheme: dark` makes Chromium paint an opaque dark canvas behind a
-   transparent document; the minimal window must stay see-through. */
 html[data-dsh-mode="minimal"] {
-  color-scheme: light;
+  /* Chromium paints an opaque white canvas behind a transparent document when
+     the scheme is `light`, which shows up as a white slab over a dark host
+     page (Google). `dark` leaves the canvas see-through. */
+  color-scheme: dark !important;
   --dsh-min-card: rgba(15, 15, 18, 0.72);
   --dsh-min-line: rgba(255, 255, 255, 0.30);
 }
@@ -284,12 +285,42 @@ html[data-dsh-mode="minimal"] [data-conversation-scroll] {
    mode nothing may paint: the page behind must stay visible and every piece of
    text must follow the page tone, otherwise a white dialog on a dark page ends
    up as white-on-white. */
-html[data-dsh-mode="minimal"] body * {
+html[data-dsh-mode="minimal"] body *,
+html[data-dsh-mode="minimal"] body *::before,
+html[data-dsh-mode="minimal"] body *::after {
   background-color: transparent !important;
   background-image: none !important;
   box-shadow: none !important;
+}
+
+html[data-dsh-mode="minimal"] body,
+html[data-dsh-mode="minimal"] body * {
   color: var(--dsh-min-label) !important;
   -webkit-text-fill-color: var(--dsh-min-label) !important;
+}
+
+/* The composer surfaces are painted by the app's own stylesheet, which is
+   injected after ours and also uses !important: match its specificity with a
+   higher one so the card can never stay an opaque theme surface. */
+html[data-dsh-mode="minimal"] #root [data-composer-seat],
+html[data-dsh-mode="minimal"] #root [data-composer-seat] *,
+html[data-dsh-mode="minimal"] #root [data-composer-card],
+html[data-dsh-mode="minimal"] #root [data-composer-card] *,
+html[data-dsh-mode="minimal"] #root [data-composer-seat] *::before,
+html[data-dsh-mode="minimal"] #root [data-composer-seat] *::after,
+html[data-dsh-mode="minimal"] #root [data-composer-input] {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Same for the conversation column: the app injects its styles after ours, so
+   equal specificity would lose to a later !important surface. */
+html[data-dsh-mode="minimal"] #root [data-slot="main"],
+html[data-dsh-mode="minimal"] #root [data-slot="main"] * {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
 
 html[data-dsh-mode="minimal"] [data-composer-input] {
@@ -321,13 +352,4 @@ html[data-dsh-mode="minimal"] [aria-modal="true"] button {
   border: 1px solid var(--dsh-min-line) !important;
   border-radius: 8px !important;
   padding: 4px 10px !important;
-}
-
-/* Scrims and decorative pseudo-elements are the remaining sources of paint
-   (dialog backdrops are often ::before/::after). */
-html[data-dsh-mode="minimal"] body *::before,
-html[data-dsh-mode="minimal"] body *::after {
-  background-color: transparent !important;
-  background-image: none !important;
-  box-shadow: none !important;
 }
