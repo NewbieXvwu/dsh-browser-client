@@ -74,6 +74,9 @@ Token 也会写入 `$DSH_HOME/browser-client-token`（0600 权限；`DSH_HOME` �
 会话头时用 `⌘⇧E` 或右键「打开完整视图」；也可以在扩展选项页把默认模式设为「完整视图」。
 完整视图窄窗口下侧栏是抽屉，左上角按钮打开会话列表。
 
+`page_navigate` 跳转、或用户自己在标签页里点了链接，原页面会卸载、浮窗随之消失；扩展会在新页面
+加载完成后自动把浮窗重新打开，原来的会话还在。不要在这个瞬间重复按快捷键，等页面加载完成即可。
+
 ## 使用
 
 ### 让 LLM 理解当前页面
@@ -108,7 +111,9 @@ LLM 会用 `page_act`（点击坐标/选择器）、必要时 `page_navigate` / 
 截个图看看现在页面什么样
 ```
 
-`page_screenshot` 调用浏览器截图（需要视觉模型看图片）。
+`page_screenshot` 让扩展截当前标签页，PNG 保存在宿主机器的 `$DSH_HOME/browser-screenshots/`
+（通常是 `~/.dsh/browser-screenshots/`），工具结果返回该文件的绝对路径；模型读取该路径即可看图。
+截的是用户正在看的真实标签页，所以页面上的登录态、弹窗、滚动位置都会原样出现。
 
 ## 页面工具一览
 
@@ -119,7 +124,7 @@ LLM 会用 `page_act`（点击坐标/选择器）、必要时 `page_navigate` / 
 | `page_act` | 点击/输入/滚动/键盘/清除（坐标或选择器定位） |
 | `page_navigate` | 跳转/后退/前进/刷新 |
 | `page_wait` | 等待选择器出现/网络空闲/延时 |
-| `page_screenshot` | 截图（视口/元素/整页），落盘工作区 |
+| `page_screenshot` | 截图（视口/元素/整页），存 `$DSH_HOME/browser-screenshots/` 并返回路径 |
 | `page_network` | 读取页面 fetch/XHR 请求（URL/方法/状态/响应体预览），理解页面数据流 |
 
 > **命名说明**：工具名使用下划线（`page_snapshot`）而非点号（`page.snapshot`）——腾讯 intranet 网关拒绝含点号的工具名（`invalid_parameter_value`）。

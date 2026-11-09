@@ -1,6 +1,6 @@
 {
   "name": "dsh-browser-host",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "DSH host bridge for the DSH Browser Client extension: serves the real DSH WebUI to the browser floating window at /browser-ui/ (same boot graph, embedded layout) with a token-authenticated /ext-api RPC proxy, a /browser-ui-mux WebSocket bridge to /api/remote.mux, a Cordis event pump and a bidirectional /ext-api-control channel for page_* tools. Targets DSH 0.2.2 client-connection.",
   "license": "MIT",
   "type": "module",

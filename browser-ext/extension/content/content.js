@@ -316,10 +316,10 @@
     return total / count > 0.55 ? 'light' : 'dark'
   }
 
-  function publishTone() {
+  function publishTone(force = false) {
     if (!visible) return
     const tone = sampleTone()
-    if (tone === lastTone) return
+    if (!force && tone === lastTone) return
     lastTone = tone
     postToPage({ type: 'dsh:tone', tone })
   }
@@ -444,8 +444,9 @@
     ui.frame.classList.remove('error')
     visible = true
     publishState()
+    void send({ type: 'dsh:panel-state', open: true, mode: requested })
     await syncPage()
-    publishTone()
+    publishTone(true)
     try { ui.iframe.contentWindow.focus() } catch { /* not focusable yet */ }
     flushPrefill()
   }
@@ -457,6 +458,7 @@
     publishState()
     if (ask) finishAsk(null)
     void send({ type: 'dsh:badge', busy: false })
+    void send({ type: 'dsh:panel-state', open: false })
   }
 
   async function toggle(options = {}) {
@@ -486,7 +488,9 @@
           pageReady = true
           if (ui) ui.host.setAttribute('data-dsh-ready', 'true')
           void syncPage()
-          publishTone()
+          // The first tone is posted before the embedded page has attached its
+          // listener, so re-send once the page is up (and on every reload).
+          publishTone(true)
           flushPrefill()
           break
         case 'dsh:size':

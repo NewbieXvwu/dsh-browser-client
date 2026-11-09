@@ -103,11 +103,15 @@ DSH_BASE=http://127.0.0.1:4101 TOKEN_FILE=test/env/browser-client-token-4101 \
 # 4. 外壳交互（不连 DSH）：快捷键/工具栏消息打开、Esc/点页面关闭、模式切换、高度自适应
 node test/embed-shell-test.mjs
 
-# 5. 全链路 E2E（需要：DSH 测试实例 + LLM key）
+# 5. 单元回归：导航后窗口重开、截图落盘
+node test/background-nav-test.mjs
+node test/tools-screenshot-test.mjs
+
+# 6. 全链路 E2E（需要：DSH 测试实例 + LLM key）
 node test/e2e-page-tool.mjs
 node test/e2e-page-network.mjs
 
-# 6. 真实浏览器 E2E（需要：加载扩展的浏览器 + DSH 实例 + LLM key）
+# 7. 真实浏览器 E2E（需要：加载扩展的浏览器 + DSH 实例 + LLM key）
 node test/live-e2e-real.mjs
 ```
 
@@ -143,6 +147,10 @@ node test/live-e2e-real.mjs
 - 打开：`⌘⇧K` / `Ctrl+Shift+K`、工具栏图标、页面右键「打开 DSH」；关闭：`Esc`、点击页面任意处、
   再按一次快捷键；`⌘⇧E` 切换完整视图（同一 iframe，不重载）。
 - 完整视图仍是原来的 `/browser-ui/`（带侧栏的会话列表）；在选项页可把默认模式设为完整视图。
+- 跳转页面后窗口会在新页面加载完成后自动重开（background 记住“这个标签页开着窗口”，
+  `webNavigation.onCompleted` 时重发 `dsh:open`），会话不丢。
+- `page_screenshot` 的 PNG 落在 `$DSH_HOME/browser-screenshots/`，工具结果给绝对路径，
+  模型据此读取图片。
 
 ### 悬浮窗结构
 

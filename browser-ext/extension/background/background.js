@@ -77,6 +77,29 @@ async function resolveDirForUrl(url) {
   return matched ? { dir: matched, via: 'rule' } : { dir: null, via: 'none' }
 }
 
+/**
+ * Tabs whose floating window is open right now. A full page navigation tears
+ * the iframe out of the DOM, so we remember the intent and re-open after the
+ * new document loads (webNavigation.onCompleted).
+ */
+const openPanels = new Map()
+
+async function reopenAfterNavigation(tabId) {
+  const state = openPanels.get(tabId)
+  if (!state) return
+  const message = { type: 'dsh:open', mode: state.mode || 'minimal' }
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      await chrome.tabs.sendMessage(tabId, message)
+      return
+    } catch {
+      // The new document's content script may not be injected yet.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
+  }
+  openPanels.delete(tabId)
+}
+
 async function activeTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   return tab
@@ -205,6 +228,17 @@ chrome.runtime.onStartup.addListener(() => {
   void createMenus()
 })
 
+chrome.tabs.onRemoved.addListener((tabId) => {
+  openPanels.delete(tabId)
+})
+
+if (chrome.webNavigation && chrome.webNavigation.onCompleted) {
+  chrome.webNavigation.onCompleted.addListener((details) => {
+    if (details.frameId !== 0) return
+    void reopenAfterNavigation(details.tabId)
+  })
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg.type !== 'string') return
   ;(async () => {
@@ -224,6 +258,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'dsh:exec-tool':
         sendResponse(await runPageTool(msg, sender))
         break
+      case 'dsh:panel-state': {
+        const tabId = sender && sender.tab && sender.tab.id
+        if (tabId !== undefined) {
+          if (msg.open) openPanels.set(tabId, { mode: msg.mode === 'standard' ? 'standard' : 'minimal' })
+          else openPanels.delete(tabId)
+        }
+        sendResponse({ ok: true })
+        break
+      }
       case 'dsh:badge':
         await setBusyBadge(Boolean(msg.busy))
         sendResponse({ ok: true })
