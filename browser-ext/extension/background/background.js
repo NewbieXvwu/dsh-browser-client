@@ -84,6 +84,144 @@ async function resolveDirForUrl(url) {
  */
 const openPanels = new Map()
 
+// ── control channel ────────────────────────────────────────────────────────
+// The host sends page-tool requests over `${baseUrl}/ext-api-control`. This
+// worker owns that socket — not the floating window — so closing the window or
+// switching to another tab never interrupts a running turn: requests keep
+// arriving and the tools keep running in the tab the user opened the window on.
+
+const CONTROL_PATH = '/ext-api-control'
+const CONTROL_KEEPALIVE_MS = 20000
+
+const control = { socket: null, retry: 0, timer: null, keep: null, target: null }
+
+async function controlUrl() {
+  const cfg = await getConfig()
+  const base = String(cfg.baseUrl || '').replace(/\/+$/, '')
+  if (!base || !cfg.token) return null
+  let parsed
+  try {
+    parsed = new URL(base)
+  } catch {
+    return null
+  }
+  const proto = parsed.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${parsed.host}${CONTROL_PATH}?token=${encodeURIComponent(cfg.token)}`
+}
+
+function sendControlFrame(frame) {
+  try {
+    if (control.socket && control.socket.readyState === 1) control.socket.send(JSON.stringify(frame))
+  } catch {
+    /* socket died between checks */
+  }
+}
+
+async function controlTargetTabId() {
+  if (control.target !== null) {
+    try {
+      const tab = await chrome.tabs.get(control.target)
+      if (tab && tab.id !== undefined) return tab.id
+    } catch {
+      control.target = null
+    }
+  }
+  const tab = await activeTab()
+  return tab && tab.id !== undefined ? tab.id : null
+}
+
+async function onControlFrame(raw) {
+  let frame
+  try {
+    frame = JSON.parse(String(raw))
+  } catch {
+    return
+  }
+  if (!frame || typeof frame.requestId !== 'string') return
+  if (frame.kind === 'tool-request') {
+    const tabId = await controlTargetTabId()
+    const reply = tabId === null
+      ? { ok: false, error: { code: 'no-tab', message: '没有可执行的目标标签页' } }
+      : await runPageTool({ tool: frame.tool, args: frame.args }, { tab: { id: tabId } })
+    sendControlFrame({
+      kind: 'tool-response',
+      requestId: frame.requestId,
+      ok: reply.ok === true,
+      result: reply.result,
+      error: reply.error
+    })
+    return
+  }
+  if (frame.kind === 'ask-request') {
+    const tabId = await controlTargetTabId()
+    let answer = null
+    let ok = false
+    if (tabId !== null) {
+      try {
+        const reply = await chrome.tabs.sendMessage(tabId, {
+          type: 'dsh:ask-ui',
+          requestId: frame.requestId,
+          question: frame.question,
+          detail: frame.detail,
+          options: frame.options
+        })
+        ok = Boolean(reply && reply.ok)
+        answer = reply && reply.answer !== undefined ? reply.answer : null
+      } catch {
+        ok = false
+      }
+    }
+    sendControlFrame({ kind: 'ask-response', requestId: frame.requestId, ok, answer })
+  }
+}
+
+function scheduleControlReconnect() {
+  if (control.timer) return
+  const delay = Math.min(15000, 1000 * 2 ** control.retry)
+  control.retry += 1
+  control.timer = setTimeout(() => {
+    control.timer = null
+    void connectControl()
+  }, delay)
+}
+
+async function connectControl() {
+  const url = await controlUrl()
+  if (!url) return
+  try {
+    control.socket?.close()
+  } catch {
+    /* already closed */
+  }
+  let socket
+  try {
+    socket = new WebSocket(url)
+  } catch {
+    scheduleControlReconnect()
+    return
+  }
+  control.socket = socket
+  socket.addEventListener('open', () => {
+    control.retry = 0
+    sendControlFrame({ kind: 'status', state: 'connected' })
+    clearInterval(control.keep)
+    // A live socket plus traffic keeps the MV3 worker from going idle.
+    control.keep = setInterval(() => sendControlFrame({ kind: 'status', state: 'connected' }), CONTROL_KEEPALIVE_MS)
+  })
+  socket.addEventListener('message', (event) => {
+    void onControlFrame(event.data)
+  })
+  socket.addEventListener('close', () => {
+    if (control.socket !== socket) return
+    control.socket = null
+    clearInterval(control.keep)
+    scheduleControlReconnect()
+  })
+  socket.addEventListener('error', () => {
+    /* a close event follows */
+  })
+}
+
 async function reopenAfterNavigation(tabId) {
   const state = openPanels.get(tabId)
   if (!state) return
@@ -230,7 +368,23 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   openPanels.delete(tabId)
+  if (control.target === tabId) control.target = null
 })
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.dshConfig) return
+  try {
+    control.socket?.close()
+  } catch {
+    /* already closed */
+  }
+  control.retry = 0
+  void connectControl()
+})
+
+// The channel belongs to the worker, so it is live before the user ever opens
+// a window and survives both closing it and switching tabs.
+void connectControl()
 
 if (chrome.webNavigation && chrome.webNavigation.onCompleted) {
   chrome.webNavigation.onCompleted.addListener((details) => {
@@ -255,13 +409,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'dsh:screenshot':
         sendResponse(await captureScreenshot(msg))
         break
-      case 'dsh:exec-tool':
-        sendResponse(await runPageTool(msg, sender))
-        break
       case 'dsh:panel-state': {
         const tabId = sender && sender.tab && sender.tab.id
         if (tabId !== undefined) {
-          if (msg.open) openPanels.set(tabId, { mode: msg.mode === 'standard' ? 'standard' : 'minimal' })
+          if (msg.open) {
+            openPanels.set(tabId, { mode: msg.mode === 'standard' ? 'standard' : 'minimal' })
+            control.target = tabId
+          }
           else openPanels.delete(tabId)
         }
         sendResponse({ ok: true })

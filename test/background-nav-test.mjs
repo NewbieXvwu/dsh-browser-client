@@ -21,7 +21,8 @@ const chrome = {
     local: {
       async get(key) { return key in storage ? { [key]: storage[key] } : {} },
       async set(patch) { Object.assign(storage, patch) }
-    }
+    },
+    onChanged: { addListener() {} }
   },
   action: { onClicked: { addListener() {} }, setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {} },
   commands: { onCommand: { addListener() {} } },
@@ -42,7 +43,13 @@ const chrome = {
   tabs2: undefined
 }
 
-vm.runInNewContext(src, { chrome, fetch: async () => ({ ok: true, json: async () => ({ ok: true }) }), URL, URLSearchParams, console, setTimeout, Promise })
+class FakeSocket {
+  constructor() { this.readyState = 0; FakeSocket.instances.push(this) }
+  addEventListener() {}
+  close() { this.readyState = 3 }
+}
+FakeSocket.instances = []
+vm.runInNewContext(src, { chrome, WebSocket: FakeSocket, fetch: async () => ({ ok: true, json: async () => ({ ok: true }) }), URL, URLSearchParams, console, setTimeout, clearTimeout, Promise })
 
 if (navListeners.length !== 1) throw new Error('expected one webNavigation listener')
 

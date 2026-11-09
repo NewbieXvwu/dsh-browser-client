@@ -15,7 +15,7 @@
  * with Esc or a click anywhere on the page.
  *
  * Messaging contract with the embedded page (`assets/transport.js`,
- * `assets/control.js`, `lib/client.js`):
+ * the extension background over `chrome.runtime`):
  *
  *   page  → us   dsh:ready / dsh:busy / dsh:close / dsh:size
  *                dsh:open-settings / dsh:bind-failed
@@ -324,24 +324,17 @@
     postToPage({ type: 'dsh:tone', tone })
   }
 
-  async function runToolFromPage(data) {
-    const reply = await send({ type: 'dsh:exec-tool', tool: data.tool, args: data.args })
-    postToPage({
-      type: 'dsh:tool-result',
-      requestId: data.requestId,
-      ok: Boolean(reply && reply.ok),
-      result: reply && reply.result,
-      error: reply && reply.error
-    })
-  }
-
-  function showAsk(data) {
-    if (!ui) return
+  function showAsk(data, respond) {
+    if (!ui) {
+      if (respond) respond(null)
+      return
+    }
     if (ask) finishAsk(null)
     if (!visible) void open()
     ask = {
       requestId: data.requestId,
-      options: Array.isArray(data.options) ? data.options.map(String) : []
+      options: Array.isArray(data.options) ? data.options.map(String) : [],
+      respond: respond || null
     }
     ui.askQuestion.textContent = String(data.question || '请确认')
     ui.askDetail.textContent = String(data.detail || '')
@@ -370,6 +363,10 @@
     if (ui) {
       ui.askEl.hidden = true
       ui.frame.classList.remove('asking')
+    }
+    if (current.respond) {
+      current.respond(answer)
+      return
     }
     postToPage({
       type: 'dsh:ask-result',
@@ -508,12 +505,6 @@
         case 'dsh:bind-failed':
           console.warn('[dsh-browser-client] workspace bind failed:', data.message)
           break
-        case 'dsh:tool':
-          void runToolFromPage(data)
-          break
-        case 'dsh:ask':
-          showAsk(data)
-          break
         default:
           break
       }
@@ -564,6 +555,16 @@
           case 'dsh:open':
             await open({ mode: message.mode, prefill: message.prefill })
             break
+          case 'dsh:ask-ui': {
+            const answer = await new Promise((resolve) => showAsk({
+              requestId: message.requestId,
+              question: message.question,
+              detail: message.detail,
+              options: message.options
+            }, resolve))
+            sendResponse({ ok: true, answered: answer !== null, answer })
+            break
+          }
           default:
             return
         }

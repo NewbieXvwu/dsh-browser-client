@@ -140,7 +140,7 @@ node test/live-e2e-real.mjs
 
 极简模式把「会挡网页」的元素全部去掉，只留模型回复与输入框，其余全部透明：
 
-- 不复用完整版布局：`lib/client.js` 把会话流裁到最后一轮（`assistant` / 错误卡），隐藏用户气泡、
+- 不复用完整版布局：`lib/client.js` 把会话流裁到最后一轮（`assistant-step` / 错误卡），隐藏用户气泡、
   过程节点、侧栏、顶栏、tab、右侧栏与 onboarding hero；`assets/embed.css` 覆盖主题变量为透明，
   并按所在页面的明暗（content script 在窗口四周采样）切换深/浅文字。
 - 窗口本身无边框、无阴影、深度透明，高度由页面内容驱动（`dsh:size`），不再常驻任何悬浮球。
@@ -149,6 +149,7 @@ node test/live-e2e-real.mjs
 - 完整视图仍是原来的 `/browser-ui/`（带侧栏的会话列表）；在选项页可把默认模式设为完整视图。
 - 跳转页面后窗口会在新页面加载完成后自动重开（background 记住“这个标签页开着窗口”，
   `webNavigation.onCompleted` 时重发 `dsh:open`），会话不丢。
+- 完整版把助手回复折叠进过程面板；极简模式会自动展开最后一轮并只显示回答文字。
 - `page_screenshot` 的 PNG 落在 `$DSH_HOME/browser-screenshots/`，工具结果给绝对路径，
   模型据此读取图片。
 
@@ -159,8 +160,9 @@ node test/live-e2e-real.mjs
 - 传输：`assets/transport.js` 把 `api/<endpoint>` 改写为 `/ext-api/<endpoint>`（Bearer token），
   `remote.mux` WebSocket 改写为 `/browser-ui-mux`；宿主侧换 operator cookie 后连接官方 mux。
 - 绑定：`lib/client.js`（客户端插件）监听父页 `dsh:page-url`，用公开 RPC 创建工作区并打开其会话。
-- 工具：`assets/control.js` 在页面内持有 `/ext-api-control`；工具请求经 content script →
-  background → 当前标签页 `page-tools.js` 执行后原路返回。
+- 工具：控制通道由 background 持有 `/ext-api-control`（面板关闭、标签页切后台都不影响执行）；
+  工具请求直接下发到目标标签页的 `page-tools.js` 执行后回传，因此关闭悬浮窗后 AI 仍能继续操作页面。
+  截图需要目标标签页处于激活状态（扩展 `captureVisibleTab` 限制）。
 
 ## 状态
 
