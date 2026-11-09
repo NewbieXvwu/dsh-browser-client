@@ -80,10 +80,29 @@ done
 echo "=== boot-$PORT.log ==="
 grep -E "extension token|registered tool|workflow store|dsh web|Error|error" "$ENV_DIR/boot-$PORT.log" | head -20 || true
 
-if lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "✓ instance ready on http://127.0.0.1:$PORT"
-  echo "  token: $ENV_DIR/browser-client-token-$PORT"
-else
+if ! lsof -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   echo "✗ instance failed to boot on :$PORT — see $ENV_DIR/boot-$PORT.log"
   exit 1
 fi
+
+TOKEN="$(cat "$ENV_DIR/browser-client-token-$PORT")"
+BASE="http://127.0.0.1:$PORT"
+
+# The floating window is the host-served WebUI page. Assert the plumbing the
+# embedded client relies on, so a regression fails here instead of in the UI.
+if ! curl -fsS "$BASE/browser-ui/?token=$TOKEN" | grep -q "__DSH_BOOT__"; then
+  echo "✗ /browser-ui/ is not serving the boot-injected WebUI page"
+  exit 1
+fi
+if ! curl -fsS -o /dev/null "$BASE/browser-ui/transport.js"; then
+  echo "✗ /browser-ui/transport.js is not served"
+  exit 1
+fi
+if [ "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/browser-ui/")" != "401" ]; then
+  echo "✗ /browser-ui/ without a token is not rejected"
+  exit 1
+fi
+
+echo "✓ instance ready on $BASE"
+echo "  token: $ENV_DIR/browser-client-token-$PORT"
+echo "  floating window: $BASE/browser-ui/?token=$TOKEN"

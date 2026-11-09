@@ -218,11 +218,12 @@ dsh-browser-host/
 │   ├── manifest.json         # 权限升级：tabs, captureVisibleTab 等
 │   ├── background/background.js  # tab 路由 + 截图 + 配置
 │   ├── content/
-│   │   ├── content.js        # 浮窗注入（已有）
-│   │   ├── page-tools.js     # 页面执行核心（snapshot/eval/act）
-│   │   └── content.css
-│   ├── panel/                # 浮窗 UI（升级：官方风格消息流）
-│   └── common/dsh-client.js  # wire client（升级：双向）
+│   │   ├── content.js        # 中性 launcher + 浮窗 frame + 页面桥
+│   │   └── page-tools.js     # 页面执行核心（snapshot/eval/act）
+│   ├── options/              # 连接设置 + 页面目录规则
+│   └── background/           # 配置 / 目录解析 / 截图 / 工具转发
+├── assets/                   # transport.js / control.js / embed.css
+│                             # （浮窗 = 宿主直出的真实 WebUI）
 ├── docs/
 │   ├── BUSINESS_PLAN.md      # 本方案
 │   └── USER_GUIDE.md         # 用户指南（安装/使用/配置）

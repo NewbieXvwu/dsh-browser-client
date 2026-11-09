@@ -46,16 +46,22 @@ Token 也会写入 `$DSH_HOME/browser-client-token`（0600 权限；`DSH_HOME` �
 1. 打开 Chrome/Edge → `chrome://extensions`
 2. 打开"开发者模式"
 3. 点"加载已解压的扩展程序"，选择目录：`dsh-browser-host/browser-ext/extension`
-4. 扩展图标出现在工具栏（右下角浮窗气泡会自动注入每个页面）
+4. 扩展图标出现在工具栏；每个页面右下角出现一个圆形按钮（悬浮窗入口）
 
 ## 首次配置
 
-1. 点击扩展图标（或页面上 DSH 浮窗气泡）打开面板
-2. 点 ⚙ 设置：
-   - **Host 地址**：`http://127.0.0.1:3080`（或你的 DSH 端口）
-   - **Token**：`browser-client-token` 文件内容（或启动日志里的 token）
-   - **当前页面目录**：可选，DSH 会话的工作目录
-3. 保存 → 面板顶部状态变为"已连接"
+1. 右键工具栏图标 →「选项」（或 `chrome://extensions` → 扩展详情 →「扩展程序选项」）
+2. 填：
+   - **宿主地址**：`http://127.0.0.1:3080`（或你的 DSH 端口）
+   - **访问令牌**：`browser-client-token` 文件内容（或启动日志里的 token）
+3. 点「测试连接」，显示"连接正常"后保存
+4. 可选：在「页面目录规则」里添加 `github.com/acme/* → /Users/me/work/acme`，命中规则的页面会自动绑定到该目录
+
+## 悬浮窗
+
+点页面右下角圆形按钮打开。悬浮窗就是 DSH WebUI 本身：会话流、composer、工具卡片、审批弹窗
+都来自宿主，扩展只提供 frame 和页面桥。完整版的顶栏、视图 tab、左侧图标栏、全局面板入口已去掉；
+窄窗口下侧栏变成抽屉，左上角按钮打开会话列表。
 
 ## 使用
 
@@ -110,14 +116,16 @@ LLM 会用 `page_act`（点击坐标/选择器）、必要时 `page_navigate` / 
 ## 安全
 
 - Token 仅本机回环通信，权限 0600，不写日志
-- 页面内容脚本只能通过 `chrome.runtime.sendMessage` 与面板通信，页面 JS 无法触达 DSH 会话
-- 面板 iframe 为 `chrome-extension://` origin，页面无法注入
+- 悬浮窗页面由宿主在 `/browser-ui/` 直出，带 token 才能打开；页面与 `/assets`、`/plugins` 同源
+- 页面内容脚本只通过 `chrome.runtime.sendMessage` 与扩展后台通信，页面 JS 无法直接触达 DSH 会话
+- 页面工具在目标标签页的 content script 内执行，扩展后台只做转发
 
 ## 故障排查
 
 | 现象 | 原因/处理 |
 |---|---|
-| 面板显示"未连接" | Token 未配置或错误；确认 DSH 已启动且插件已挂载 |
-| "extension not connected" | 浮窗面板未打开——页面工具依赖面板的 control 连接，关掉面板工具会超时 |
+| 悬浮窗提示"尚未配置访问令牌" | 打开扩展选项页填写 token，保存后重开浮窗 |
+| 工具栏图标点击无效 / 打开独立窗口 | 当前页面不能注入 content script（`chrome://`、应用商店等），会自动以独立窗口打开同一页面 |
+| 页面工具超时 | 悬浮窗必须保持打开——工具请求经 `assets/control.js` 的 control 连接转发 |
 | content script 未响应 | 页面加载后未刷新；刷新页面重试 |
 | 工具调用报网关错误 | 确认工具名无点号；检查 DSH 日志与腾讯网关日志（`$DSH_HOME/logs/tencent-intranet/`） |

@@ -1,0 +1,80 @@
+/*
+ * embed.css — the floating window is the real DSH WebUI with the harness
+ * navigation removed.
+ *
+ * We do not fork a single upstream component: every rule below only hides a
+ * region the web shell draws for a full-page workspace. Regions are addressed
+ * through public DOM hooks — `data-window-drag`, `data-shell-*`,
+ * `data-conversation-*`, `data-slot` — never through the hashed CSS-module
+ * class names, so an upstream restyle does not break the embed layout.
+ *
+ * Kept on purpose:
+ *   - the conversation stream, tool cards, composer and its slash commands;
+ *   - the session list (management) and the sidebar opener;
+ *   - dialogs, toasts and the overlay layer.
+ */
+
+/* The page is not a window: no draggable title strip, no OS frame clearance. */
+html[data-dsh-embed] {
+  --dsh-frame-top-clearance: 0px;
+  --dsh-frame-overlay-top: 12px;
+}
+
+/* App rail on the far left (chat / terminal / …) — a full-page feature.
+   In the drawer layout the same seat only holds the sidebar opener, which the
+   floating window keeps: sessions are still reachable from a 520px window. */
+html[data-dsh-embed] [data-shell-leading] {
+  display: none !important;
+}
+html[data-dsh-embed] [data-sidebar-drawer][data-sidebar-collapsed] [data-shell-leading] {
+  display: block !important;
+}
+html[data-dsh-embed] [data-sidebar-drawer][data-sidebar-collapsed] [data-sidebar-opener] {
+  position: fixed; top: 10px; left: 10px; z-index: 20;
+  width: 30px; height: 30px; border-radius: 8px;
+  color: var(--dsw-alias-label-secondary, #9aa3af);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background-color .15s ease, color .15s ease;
+}
+html[data-dsh-embed] [data-sidebar-drawer][data-sidebar-collapsed] [data-sidebar-opener]:hover {
+  color: var(--dsw-alias-label-primary, #f5f7fa);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Bottom status row of the full page (branch, model chips, …). */
+html[data-dsh-embed] [data-shell-bottom] {
+  display: none !important;
+}
+
+/* Session top bar: title, 对话/轨迹/上下文/编队 view tabs, actions. Keep the
+   leading seat (it holds the sidebar opener), drop everything else. */
+html[data-dsh-embed] [data-conversation-tabs] {
+  display: none !important;
+}
+html[data-dsh-embed] header[data-window-drag] > *:not([data-conversation-header-leading]) {
+  display: none !important;
+}
+html[data-dsh-embed] header[data-window-drag] {
+  min-height: 44px;
+}
+
+/* Sidebar: sessions only. The global panel list (插件 / 自动化任务 / 更多) and
+   the footer (settings,更多) are full-page navigation, not session management. */
+html[data-dsh-embed] [data-slot="sidebar"] nav:has([data-slot="sidebar.panellist"]) {
+  display: none !important;
+}
+html[data-dsh-embed] [data-slot="sidebar"] div:has(> [data-slot="sidebar.settings"]),
+html[data-dsh-embed] [data-slot="sidebar"] div:has(> [data-slot="sidebar.footer.action"]) {
+  display: none !important;
+}
+
+/* Brand / drag strip inside the sidebar — the panel starts at 新会话. */
+html[data-dsh-embed] [data-slot="sidebar"] [data-window-drag] {
+  display: none !important;
+}
+
+/* A floating window never needs a full-page drawer scrim. */
+html[data-dsh-embed] [data-sidebar-mask] {
+  backdrop-filter: none;
+}

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DSH 浏览器扩展设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>DSH 浏览器扩展</h1>
+      <p class="lede">悬浮窗由本机的 DSH 宿主提供。填写宿主地址与访问令牌即可使用。</p>
+    </header>
+
+    <section>
+      <h2>连接</h2>
+      <div class="field">
+        <label for="base-url">宿主地址</label>
+        <input id="base-url" type="url" spellcheck="false" placeholder="http://127.0.0.1:3080">
+      </div>
+      <div class="field">
+        <label for="token">访问令牌</label>
+        <div class="secret">
+          <input id="token" type="password" spellcheck="false" autocomplete="off" placeholder="extension token">
+          <button id="reveal" type="button" class="ghost">显示</button>
+        </div>
+        <p class="hint">宿主启动日志里的 <code>[dsh-browser-host] extension token: …</code>，或 <code>$DSH_HOME/browser-client-token</code>。</p>
+      </div>
+      <div class="actions">
+        <button id="save" type="button" class="primary">保存</button>
+        <button id="test" type="button">测试连接</button>
+        <span id="status" class="status" role="status"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>页面目录规则</h2>
+      <p class="hint">命中规则的页面会自动绑定到对应目录；没有规则时，悬浮窗使用最近的工作区。</p>
+      <div id="rules" class="rules"></div>
+      <button id="add-rule" type="button" class="ghost">添加规则</button>
+      <div class="actions">
+        <button id="save-rules" type="button" class="primary">保存规则</button>
+        <span id="rules-status" class="status" role="status"></span>
+      </div>
+    </section>
+
+    <footer>
+      <p class="hint">令牌只保存在浏览器本地存储中，不会发送给第三方。</p>
+    </footer>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

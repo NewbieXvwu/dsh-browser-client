@@ -2,13 +2,20 @@
 # Client extension. Insert this bundle into a profile layer stack so the
 # extension can drive this harness from a floating panel in any page.
 #
+# The floating window is the real DSH WebUI served by this plugin at
+# /browser-ui/: the official index is read through webServer.readResource with
+# the owner peer (no cookie), decorated with a transport shim, and embeds
+# without any full-page navigation. /browser-ui-mux proxies the official
+# /api/remote.mux stream for that page.
+#
 # The /api trust fence of the official browser client requires a same-origin
 # caller (Origin must equal the Host header); a browser-extension page
-# (chrome-extension://…) can never satisfy it. This plugin opens a separate
-# token-authenticated surface: /ext-api/* (HTTP RPC proxy over the official
-# client-connection transport, with the owner browser Peer) and /ext-events.mux
-# (WebSocket pump of Cordis session events). The token is minted at boot and
-# printed in the log (plus written to $DSH_HOME/browser-client-token).
+# (chrome-extension://…) can never satisfy it. The plugin therefore also opens
+# a token-authenticated surface for the extension: /ext-api/* (HTTP RPC proxy
+# over the official client-connection transport, with the owner browser Peer),
+# /ext-events.mux (WebSocket pump of Cordis session events) and
+# /ext-api-control (bidirectional page_* tool channel). The token is minted at
+# boot and printed in the log (plus written to $DSH_HOME/browser-client-token).
 - insert:
     - id: dsh-browser-host
       name: 'dsh-browser-host'
