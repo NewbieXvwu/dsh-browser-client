@@ -108,6 +108,8 @@ html[data-dsh-mode="minimal"] body[data-ds-dark-theme] {
 }
 html[data-dsh-mode="minimal"][data-dsh-tone="light"] {
   --dsh-min-label: #0f1115;
+  --dsh-min-card: rgba(255, 255, 255, 0.82);
+  --dsh-min-line: rgba(15, 17, 21, 0.30);
   --dsh-min-halo: none;
 }
 
@@ -115,6 +117,8 @@ html[data-dsh-mode="minimal"][data-dsh-tone="light"] {
    transparent document; the minimal window must stay see-through. */
 html[data-dsh-mode="minimal"] {
   color-scheme: light;
+  --dsh-min-card: rgba(15, 15, 18, 0.72);
+  --dsh-min-line: rgba(255, 255, 255, 0.30);
 }
 html[data-dsh-mode="minimal"],
 html[data-dsh-mode="minimal"] body,
@@ -272,4 +276,58 @@ html[data-dsh-mode="minimal"] [data-turn-process] {
    bottom, flush with the input. */
 html[data-dsh-mode="minimal"] [data-conversation-scroll] {
   padding: 0 !important;
+}
+
+/* ── surfaces outside the conversation column ────────────────────────────────
+   Dialogs, popovers, the onboarding card and any other elevated surface keep
+   their own theme colours (a light-theme dialog is solid white). In minimal
+   mode nothing may paint: the page behind must stay visible and every piece of
+   text must follow the page tone, otherwise a white dialog on a dark page ends
+   up as white-on-white. */
+html[data-dsh-mode="minimal"] body * {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: var(--dsh-min-label) !important;
+  -webkit-text-fill-color: var(--dsh-min-label) !important;
+}
+
+html[data-dsh-mode="minimal"] [data-composer-input] {
+  caret-color: var(--dsh-min-label) !important;
+}
+
+html[data-dsh-mode="minimal"] [data-placeholder]::before {
+  color: var(--dsh-min-label) !important;
+  -webkit-text-fill-color: var(--dsh-min-label) !important;
+  opacity: 0.55 !important;
+}
+
+html[data-dsh-mode="minimal"] img,
+html[data-dsh-mode="minimal"] video,
+html[data-dsh-mode="minimal"] canvas {
+  background-color: transparent !important;
+}
+
+/* Functional dialogs (login, API key, permissions) keep a translucent card so
+   their text never overlaps the conversation; everything else stays bare. */
+html[data-dsh-mode="minimal"] [aria-modal="true"] {
+  background: var(--dsh-min-card) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  backdrop-filter: blur(14px) !important;
+  border-radius: 14px !important;
+}
+
+html[data-dsh-mode="minimal"] [aria-modal="true"] button {
+  border: 1px solid var(--dsh-min-line) !important;
+  border-radius: 8px !important;
+  padding: 4px 10px !important;
+}
+
+/* Scrims and decorative pseudo-elements are the remaining sources of paint
+   (dialog backdrops are often ::before/::after). */
+html[data-dsh-mode="minimal"] body *::before,
+html[data-dsh-mode="minimal"] body *::after {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }
