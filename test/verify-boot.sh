@@ -3,15 +3,18 @@
 # dsh-browser-host plugin mounted, for verification/testing.
 #
 # RULE: never touch the 3080 production instance. Every verification uses a
-# brand-new port. Default port is chosen from an env var or auto-incremented.
+# brand-new port and its own DSH_HOME (test/env/home-<port>), so the running
+# harness's profiles, sessions and settings are untouched.
 #
 # Usage:
-#   ./test/verify-boot.sh [port]        # boot on the given port (default 4101)
-#   ./test/verify-boot.sh stop [port]   # stop the instance on that port
+#   ./test/verify-boot.sh [port]         # boot on the given port (default 4101)
+#   ./test/verify-boot.sh [port] stop    # stop the instance on that port
 #
 # The instance's token is written to test/env/browser-client-token-<port> and
-# its log to test/env/boot-<port>.log. Store tests should point TOKEN_FILE at
-# the per-port token.
+# its log to test/env/boot-<port>.log. Tests should point TOKEN_FILE at the
+# per-port token and DSH_BASE at http://127.0.0.1:<port>.
+#
+# Requirements: the DSH CLI is resolved from $DSH_BIN or PATH (`dsh`).
 
 set -euo pipefail
 
@@ -19,6 +22,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_DIR="$ROOT/test/env"
 PORT="${1:-4101}"
 ACTION="${2:-boot}"
+PROFILE="verify-$PORT"
+DSH_HOME_DIR="$ENV_DIR/home-$PORT"
+DSH_BIN="${DSH_BIN:-$(command -v dsh || true)}"
+
+if [ -z "$DSH_BIN" ]; then
+  echo "✗ cannot find the dsh CLI; set DSH_BIN=/path/to/dsh" >&2
+  exit 1
+fi
 
 case "$ACTION" in
   stop)
@@ -33,11 +44,7 @@ case "$ACTION" in
     ;;
 esac
 
-# Stop any stale instance on this port first.
-if [ -f "$ENV_DIR/dsh-$PORT.pid" ]; then
-  kill "$(cat "$ENV_DIR/dsh-$PORT.pid")" 2>/dev/null || true
-  sleep 1
-fi
+mkdir -p "$ENV_DIR" "$DSH_HOME_DIR"
 
 # Per-port overlay: mount the plugin, persist token to a per-port file.
 cat > "$ENV_DIR/overlay-$PORT.yml" <<EOF
@@ -55,14 +62,15 @@ EOF
 echo "booting isolated DSH on :$PORT (plugin: $ROOT/lib/index.js)…"
 (
   cd "$ENV_DIR"
-  nohup node "$ENV_DIR/profiles/node_modules/@deepseek-ai/dsh/lib/bin.js" \
-    web --patch "$ENV_DIR/overlay-$PORT.yml" --port "$PORT" --no-open \
+  DSH_HOME="$DSH_HOME_DIR" nohup node "$DSH_BIN" \
+    --profile "$PROFILE" --from-default-profile web \
+    --patch "$ENV_DIR/overlay-$PORT.yml" --port "$PORT" --no-open \
     > "$ENV_DIR/boot-$PORT.log" 2>&1 &
   echo $! > "$ENV_DIR/dsh-$PORT.pid"
 )
 
 # Wait for the plugin to report readiness.
-for i in $(seq 1 30); do
+for i in $(seq 1 40); do
   if grep -q "dsh web:" "$ENV_DIR/boot-$PORT.log" 2>/dev/null; then
     break
   fi

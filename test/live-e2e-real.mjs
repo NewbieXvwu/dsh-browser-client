@@ -11,7 +11,8 @@ import WebSocket from 'ws'
 import { readFileSync } from 'node:fs'
 
 const HOST = 'http://127.0.0.1:3999'
-const token = readFileSync('/Users/jimmy/work/demo/dsh-browser-host/test/env/browser-client-token', 'utf8').trim()
+const TOKEN_FILE = process.env.TOKEN_FILE || new URL('./env/browser-client-token', import.meta.url).pathname
+const token = readFileSync(TOKEN_FILE, 'utf8').trim()
 const rpc = async (method, payload) => {
   const res = await fetch(`${HOST}/ext-api/${method}`, {
     method: 'POST',

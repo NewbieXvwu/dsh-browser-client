@@ -62,6 +62,8 @@
     busy: false,
     wsStream: null,      // mux unsubscribe fn
     pendingApprovals: new Map(),
+    toolNames: new Map(), // callId -> tool name (DSH 0.2.2 tool/result omits it)
+    pendingUserTexts: [], // optimistic echoes awaiting their user/message frame
     workflows: [],       // saved workflows
     wfTemplates: [],     // scenario templates
     wfRunning: null      // current run status
@@ -550,6 +552,8 @@
 
   async function openSession(sessionId) {
     state.sessionId = sessionId
+    state.pendingUserTexts = []
+    state.toolNames.clear()
     state.messages = []
     renderMessages()
     renderSessions()
@@ -590,8 +594,18 @@
     const t = event.type
     const d = event.data || {}
     if (t === 'user/message' || t === 'assistant/message') {
+      if (t === 'user/message' && !isUserAuthored(d)) return
       const text = extractText(d)
       if (text) {
+        // sendPrompt already rendered this message optimistically; skip the
+        // echo (queued prompts echo later, so keep one entry per send).
+        if (t === 'user/message') {
+          const echo = state.pendingUserTexts.indexOf(text)
+          if (echo !== -1) {
+            state.pendingUserTexts.splice(echo, 1)
+            return
+          }
+        }
         addMessage(t === 'user/message' ? 'user' : 'assistant', text, event.time)
         scrollBottom()
       }
@@ -639,14 +653,14 @@
     if (!els2.banner) return
     const d = event.data || {}
     if (event.type === 'tool/call') {
-      const name = d.name || (d.call && d.call.name) || ''
+      const name = toolCallInfo(d).name
       if (name.startsWith('explore_')) {
         els2.banner.hidden = false
         if (name === 'explore_start') {
           els2.text.textContent = '🧭 探索开始：正在尝试完成你的目标…'
           if (els2.steps) { els2.steps.innerHTML = ''; els2.steps.hidden = true }
         } else if (name === 'explore_act') {
-          els2.text.textContent = '🔍 正在页面操作：' + (extractArgText(d.args || (d.call && d.call.arguments) || {}))
+          els2.text.textContent = '🔍 正在页面操作：' + (extractArgText(toolCallInfo(d).args))
         } else if (name === 'explore_check') {
           els2.text.textContent = '✅ 正在检查目标是否达成…'
         } else if (name === 'explore_ask') {
@@ -656,14 +670,18 @@
         }
       }
     } else if (event.type === 'tool/result') {
-      const name = (d.call && d.call.name) || (d.name) || ''
+      const name = toolCallInfo(d).name
       if (name === 'explore_finish') {
         els2.banner.hidden = true
         if (els2.steps) { els2.steps.innerHTML = ''; els2.steps.hidden = true }
       } else if (name === 'explore_act' && els2.steps) {
         // 把"已学会的步骤"展示给普通用户看（探索透明）。
-        const res = d.result || d.response || {}
-        const val = res && res.value
+        // 0.2.2 delivers the tool output as rendered text content; 0.1.x put
+        // it on result.value. Accept both.
+        let val = d.result && d.result.value !== undefined ? d.result.value : (d.response && d.response.value)
+        if (val === undefined) {
+          try { val = JSON.parse(extractText(d)) } catch { val = undefined }
+        }
         const note = val && val.note
         const success = val ? val.success !== false : true
         if (note) {
@@ -685,27 +703,53 @@
     } catch { return '' }
   }
 
+  // DSH 0.1.x put message parts on data.content; 0.2.2 wraps them in a
+  // message object (assistant/message, tool/result). Accept both.
+  function contentParts(data) {
+    if (!data) return []
+    if (Array.isArray(data.content)) return data.content
+    if (data.message && Array.isArray(data.message.content)) return data.message.content
+    return []
+  }
+
+  /** Whether a user/message came from the human rather than a Harness-injected
+   *  context snapshot (runtime-context / skill-catalog / time-context). */
+  function isUserAuthored(data) {
+    const src = (data && data.message && data.message.source) || (data && data.source)
+    return !src || src.kind === 'user'
+  }
+
   function extractText(data) {
-    const content = data && data.content || []
-    return content
+    return contentParts(data)
       .filter((c) => c && c.type === 'text')
       .map((c) => c.text)
       .join('')
   }
 
+  // 0.2.2 tool events: call = {callId,name,arguments}, result = {callId,
+  // message:{content}}. 0.1.x used {name,args} / {result}. Normalise both and
+  // remember the call name by id, because tool/result no longer carries it.
+  function toolCallInfo(d) {
+    const name = d.name || (d.call && d.call.name) || state.toolNames.get(d.callId) || 'tool'
+    const args = d.arguments ?? d.args ?? (d.call && d.call.arguments) ?? {}
+    return { name, args }
+  }
+
   function addToolEvent(event) {
     const d = event.data || {}
     if (event.type === 'tool/call') {
-      const name = d.name || (d.call && d.call.name) || 'tool'
-      const args = d.args || (d.call && d.call.arguments) || {}
+      const { name, args } = toolCallInfo(d)
+      if (d.callId) state.toolNames.set(d.callId, name)
       let argText = ''
       try { argText = typeof args === 'string' ? args : JSON.stringify(args).slice(0, 200) } catch {}
       addMessage('tool', `🛠 ${name}\n${argText}`)
     } else if (event.type === 'tool/result') {
-      const result = d.result || (d.response && d.response.value) || {}
+      const { name } = toolCallInfo(d)
+      const text = extractText(d)
+      const result = d.result || (d.response && d.response.value) || text
       let resultText = ''
       try { resultText = typeof result === 'string' ? result : JSON.stringify(result).slice(0, 300) } catch {}
-      addMessage('tool', `✓ 结果\n${resultText}`)
+      addMessage('tool', `✓ ${name}\n${resultText}`)
     }
   }
 
@@ -751,6 +795,7 @@
       const t = event.type
       const d = event.data || {}
       if (t === 'user/message') {
+        if (!isUserAuthored(d)) continue
         const text = extractText(d)
         if (text) out.push({ role: 'user', text, time: fmt(event.time) })
       } else if (t === 'assistant/message') {
@@ -786,6 +831,7 @@
     els.input.value = ''
     addMessage('user', text)
     scrollBottom()
+    state.pendingUserTexts.push(text)
     try {
       const r = await state.client.call('session.prompt', {
         sessionId: state.sessionId,
@@ -797,6 +843,8 @@
         addMessage('tool', `命令: ${r.command.text || 'ok'}`)
       }
     } catch (err) {
+      const pending = state.pendingUserTexts.indexOf(text)
+      if (pending !== -1) state.pendingUserTexts.splice(pending, 1)
       addMessage('error', '发送失败: ' + err.message)
     }
   }

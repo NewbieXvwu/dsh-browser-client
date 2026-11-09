@@ -2,6 +2,8 @@
 
 DSH Browser Client 是一个浏览器扩展 + DSH host 插件的组合，让你在任意网页右下角的浮窗里，通过自然语言让 DeepSeek Harness 理解并操作当前页面。
 
+> 适用版本：**DSH 0.2.2**（client-connection 传输）。若使用 0.1.x，请用 0.1.x 分支的插件；0.2.2 已移除 `apiProxy`。
+
 ## 安装
 
 ### 1. 安装 host 插件（DSH 侧）
@@ -17,6 +19,7 @@ DSH Browser Client 是一个浏览器扩展 + DSH host 插件的组合，让你�
         extEventsPath: /ext-events.mux
         persistToken: true
         tokenFile: $DSH_HOME/browser-client-token   # 默认
+        extraOrigins: []          # 额外放行的 Origin（如本地调试页 http://127.0.0.1:8899）
         toolTimeoutMs: 60000
 ```
 
@@ -26,10 +29,17 @@ DSH Browser Client 是一个浏览器扩展 + DSH host 插件的组合，让你�
 [dsh-browser-host] extension token: <32-hex-token>
 [dsh-browser-host] registered tool page_snapshot
 [dsh-browser-host] registered tool page_eval
-... (6 个 page_* 工具)
+... (9 个 page_* 工具)
 ```
 
-Token 也会写入 `$DSH_HOME/browser-client-token`（0600 权限）。
+Token 也会写入 `$DSH_HOME/browser-client-token`（0600 权限；`DSH_HOME` 未设置时回退到 `~/.dsh`）。
+
+> 推荐安装方式（自动写入 profile 的 bundle 列表并安装依赖）：
+> ```bash
+> dsh plugin --profile web add file:/path/to/dsh-browser-client
+> ```
+> 之后在 `~/.dsh/profiles/web/package.json` 的 `dsh.profile.bundles` 中确认包含
+> `dsh-browser-host`，重启 DSH 即可。
 
 ### 2. 安装浏览器扩展
 

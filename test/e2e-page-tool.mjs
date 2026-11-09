@@ -18,7 +18,7 @@ import WebSocket from 'ws'
 import { readFileSync } from 'node:fs'
 
 const BASE = process.env.DSH_BASE || 'http://127.0.0.1:3999'
-const TOKEN_FILE = process.env.TOKEN_FILE || '/Users/jimmy/work/demo/dsh-browser-host/test/env/browser-client-token'
+const TOKEN_FILE = process.env.TOKEN_FILE || new URL('./env/browser-client-token', import.meta.url).pathname
 const SESSION = process.env.DSH_SESSION || readFileSync('/tmp/dsh-test-session-id', 'utf8').trim()
 const token = readFileSync(TOKEN_FILE, 'utf8').trim()
 

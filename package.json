@@ -1,7 +1,7 @@
 {
   "name": "dsh-browser-host",
-  "version": "0.1.0",
-  "description": "DSH host-side bridge for the DSH Browser Client extension: a token-authenticated /ext-api RPC proxy + /ext-events.mux WebSocket event stream + bidirectional /ext-api-control channel, so a browser extension page (which cannot pass the same-origin /api trust fence) can drive the harness from a floating panel and operate the current page via page_* tools.",
+  "version": "0.2.0",
+  "description": "DSH host-side bridge for the DSH Browser Client extension: a token-authenticated /ext-api RPC proxy + /ext-events.mux WebSocket event stream + bidirectional /ext-api-control channel, so a browser extension page (which cannot pass the same-origin /api trust fence) can drive the harness from a floating panel and operate the current page via page_* tools. Targets DSH 0.2.2 client-connection (the apiProxy transport was removed).",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -19,14 +19,19 @@
       "patch": "./cordis.patch.yml"
     }
   },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.19.0",
+    "ws": "^8.18.0",
+    "zod": "^3.25.76"
+  },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-host-apiproxy": "^0.1.0-rc.6"
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-client-connection": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.2-rc.1"
   },
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-host-webserver": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-host-apiproxy": "^0.1.0-rc.6"
+    "@deepseek-ai/cordis": "^4.1.0",
+    "@deepseek-ai/dsh-client-connection": "^0.2.2-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.2-rc.1"
   }
 }

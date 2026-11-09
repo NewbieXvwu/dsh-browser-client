@@ -16,3 +16,6 @@ test/env/storages/
 # temp
 *.tgz
 *.log
+
+# isolated verification homes
+test/env/home-*/

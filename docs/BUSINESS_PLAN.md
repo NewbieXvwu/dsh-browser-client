@@ -58,7 +58,7 @@
         ▼
 ┌─────────────────────── DSH Host ───────────────────────────────┐
 │  dsh-browser-host 插件 (lib/index.js)                            │
-│   · /ext-api RPC 代理（已有）→ 复用 apiProxy 官方通道             │
+│   · /ext-api RPC 代理（已有）→ 复用 client-connection 官方通道    │
 │   · /ext-events.mux 事件流（已有）→ 会话事件推送                  │
 │   · 双向通道升级（新）：扩展可上行回传工具结果                     │
 │   · 页面工具注册（新）：                                        │

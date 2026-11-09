@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 
 const CDP = 'http://127.0.0.1:9224'
 const HOST = 'http://127.0.0.1:4116'
-const TOKEN_FILE = '/Users/jimmy/work/demo/dsh-browser-host/test/env/browser-client-token-4116'
+const TOKEN_FILE = process.env.TOKEN_FILE || new URL('./env/browser-client-token-4116', import.meta.url).pathname
 const token = readFileSync(TOKEN_FILE, 'utf8').trim()
 
 async function listTargets() { return (await (await fetch(`${CDP}/json`)).json()) }

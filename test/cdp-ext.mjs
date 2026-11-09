@@ -20,5 +20,5 @@ function extIdFromPath(p) {
   return id
 }
 
-const dir = '/Users/jimmy/work/demo/dsh-browser-host/browser-ext/extension'
+const dir = process.env.EXT_DIR || new URL('../browser-ext/extension', import.meta.url).pathname
 console.log('predicted extension id:', extIdFromPath(dir))

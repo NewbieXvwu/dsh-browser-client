@@ -5,9 +5,9 @@
 # The /api trust fence of the official browser client requires a same-origin
 # caller (Origin must equal the Host header); a browser-extension page
 # (chrome-extension://…) can never satisfy it. This plugin opens a separate
-# token-authenticated surface: /ext-api/* (HTTP RPC proxy over the same
-# apiProxy service the official /api uses) and /ext-events.mux (WebSocket
-# pump of the same events.mux stream). The token is minted at boot and
+# token-authenticated surface: /ext-api/* (HTTP RPC proxy over the official
+# client-connection transport, with the owner browser Peer) and /ext-events.mux
+# (WebSocket pump of Cordis session events). The token is minted at boot and
 # printed in the log (plus written to $DSH_HOME/browser-client-token).
 - insert:
     - id: dsh-browser-host
@@ -20,8 +20,8 @@
         extEventsPath: /ext-events.mux
         # If false, tokens are minted fresh at boot (no persistence).
         persistToken: true
-        # Extra CORS origins allowed (exact origin strings, e.g.
-        # 'chrome-extension://abcdef'). The plugin echoes any Origin ending in
-        # '://extension' anyway; these are for dev builds (e.g.
-        # http://localhost:5173).
+        # Extra CORS/WS origins allowed (exact origin strings). The plugin
+        # already allows chrome-extension://, moz-extension:// and
+        # safari-extension:// origins; list additional ones here for dev pages
+        # (e.g. http://127.0.0.1:8899).
         extraOrigins: []
