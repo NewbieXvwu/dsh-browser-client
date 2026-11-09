@@ -70,7 +70,7 @@ test/
 1. **Host 插件**：把 `cordis.patch.yml` 插入 DSH profile，重启 DSH。启动日志打印 token 并注册 9 个 `page_*` 工具。
 2. **扩展**：Chrome → `chrome://extensions` → 开发者模式 → 加载已解压 → 选 `browser-ext/extension`。
 3. **配置**：扩展详情 → 扩展程序选项（或右键图标 → 选项）填 Host 地址 + token（`$DSH_HOME/browser-client-token`），点"测试连接"。
-4. **使用**：点页面右下角的圆形按钮打开悬浮窗（就是 DSH WebUI，已去掉完整版导航）；悬浮窗里问"这个页面现在显示什么？" → LLM 调 `page_snapshot` 回答。
+4. **使用**：按 `⌘⇧K`（Windows/Linux `Ctrl+Shift+K`）或点工具栏图标打开悬浮窗（默认极简模式：只有输入框和回复文字，背景全透明）；再次按键或 `Esc` 关闭，`⌘⇧E` 在当前窗口切极简/完整视图。悬浮窗里问"这个页面现在显示什么？" → LLM 调 `page_snapshot` 回答。
 
 详见 [docs/USER_GUIDE.md](docs/USER_GUIDE.md)。
 
@@ -93,16 +93,21 @@ node test/bridge-unit-test.mjs
 DSH_BASE=http://127.0.0.1:4101 TOKEN_FILE=test/env/browser-client-token-4101 \
   node test/extension-flow-test.mjs
 
-# 3. 悬浮窗（真实 WebUI）端到端，不需要 LLM key
+# 3. 极简悬浮窗（默认模式）与完整视图，不需要 LLM key
 #    页面 boot → /ext-api RPC → mux WebSocket → 绑定目录 → 提问回显
 DSH_BASE=http://127.0.0.1:4101 TOKEN_FILE=test/env/browser-client-token-4101 \
   node test/embed-test.mjs
+DSH_BASE=http://127.0.0.1:4101 TOKEN_FILE=test/env/browser-client-token-4101 \
+  node test/embed-minimal-test.mjs
 
-# 4. 全链路 E2E（需要：DSH 测试实例 + LLM key）
+# 4. 外壳交互（不连 DSH）：快捷键/工具栏消息打开、Esc/点页面关闭、模式切换、高度自适应
+node test/embed-shell-test.mjs
+
+# 5. 全链路 E2E（需要：DSH 测试实例 + LLM key）
 node test/e2e-page-tool.mjs
 node test/e2e-page-network.mjs
 
-# 5. 真实浏览器 E2E（需要：加载扩展的浏览器 + DSH 实例 + LLM key）
+# 6. 真实浏览器 E2E（需要：加载扩展的浏览器 + DSH 实例 + LLM key）
 node test/live-e2e-real.mjs
 ```
 
@@ -120,17 +125,29 @@ node test/live-e2e-real.mjs
 `extension-flow-test`、`workflow-store-test`、`workflow-executor-test`、`control-channel-smoke` 全部通过；
 工作流经 storageDomain 落盘并跨重启保留。因环境没有 `DEEPSEEK_API_KEY`，未验证真实模型回复。
 
-**悬浮窗重构（2026-11，插件 0.3.0 / 扩展 0.2.0）**：悬浮窗不再自带聊天 UI，而是由宿主插件在
+**悬浮窗重构（2026-11，插件 0.3.x / 扩展 0.3.0）**：悬浮窗不再自带聊天 UI，而是由宿主插件在
 `/browser-ui/` 直出真实 DSH WebUI（`webServer.readResource` + owner peer 取官方 index，
 注入 transport shim 与只做隐藏的 `embed.css`），页面经 `/browser-ui-mux` 代理宿主
 `/api/remote.mux`，RPC 走 `/ext-api`。`test/embed-test.mjs` 在隔离实例上验证：
 真实 WebUI 启动、transport 生效、RPC 成功、mux 建连、目录绑定出工作区与会话、提问回显、
 无 console 错误（520×760 抽屉布局截图核对）。
 
+### 极简模式（默认）
+
+极简模式把「会挡网页」的元素全部去掉，只留模型回复与输入框，其余全部透明：
+
+- 不复用完整版布局：`lib/client.js` 把会话流裁到最后一轮（`assistant` / 错误卡），隐藏用户气泡、
+  过程节点、侧栏、顶栏、tab、右侧栏与 onboarding hero；`assets/embed.css` 覆盖主题变量为透明，
+  并按所在页面的明暗（content script 在窗口四周采样）切换深/浅文字。
+- 窗口本身无边框、无阴影、深度透明，高度由页面内容驱动（`dsh:size`），不再常驻任何悬浮球。
+- 打开：`⌘⇧K` / `Ctrl+Shift+K`、工具栏图标、页面右键「打开 DSH」；关闭：`Esc`、点击页面任意处、
+  再按一次快捷键；`⌘⇧E` 切换完整视图（同一 iframe，不重载）。
+- 完整视图仍是原来的 `/browser-ui/`（带侧栏的会话列表）；在选项页可把默认模式设为完整视图。
+
 ### 悬浮窗结构
 
-- 页面：`${baseUrl}/browser-ui/?token=…` —— 官方 index，去掉完整版导航（顶栏/tab/图标栏/全局面板/设置），
-  保留会话流、composer、会话侧栏（窄窗为抽屉，左上角按钮打开）。
+- 页面：`${baseUrl}/browser-ui/?token=…&mode=minimal|standard` —— 官方 index，去掉完整版导航
+  （顶栏/tab/图标栏/全局面板/设置），保留会话流、composer、会话侧栏（窄窗为抽屉，左上角按钮打开）。
 - 传输：`assets/transport.js` 把 `api/<endpoint>` 改写为 `/ext-api/<endpoint>`（Bearer token），
   `remote.mux` WebSocket 改写为 `/browser-ui-mux`；宿主侧换 operator cookie 后连接官方 mux。
 - 绑定：`lib/client.js`（客户端插件）监听父页 `dsh:page-url`，用公开 RPC 创建工作区并打开其会话。

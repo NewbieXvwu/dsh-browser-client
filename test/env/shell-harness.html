@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>shell harness</title>
+<style>body{margin:0;height:100vh;background:#f4f5f7}</style></head>
+<body>
+<script>
+  const params = new URLSearchParams(location.search)
+  window.__TOKEN__ = params.get('token') || ''
+  window.__BASE__ = params.get('base') || 'http://127.0.0.1:4145'
+  const listeners = []
+  const storageListeners = []
+  window.__emit = (message) => {
+    for (const fn of listeners.slice()) fn(message, {}, () => {})
+  }
+  window.chrome = {
+    runtime: {
+      id: 'harness',
+      lastError: undefined,
+      getURL: (p) => 'http://127.0.0.1:8903/root/' + p,
+      getManifest: () => ({ manifest_version: 3 }),
+      sendMessage: (message, cb) => {
+        if (message && message.type === 'dsh:get-config') {
+          setTimeout(() => cb && cb({ baseUrl: window.__BASE__, token: window.__TOKEN__, rules: [] }), 5)
+          return
+        }
+        if (message && message.type === 'dsh:resolve-dir') {
+          setTimeout(() => cb && cb({ dir: '/tmp/dsh-shell', via: 'harness' }), 5)
+          return
+        }
+        setTimeout(() => cb && cb({ ok: true }), 5)
+      },
+      onMessage: { addListener: (fn) => listeners.push(fn) }
+    },
+    storage: {
+      local: { get: (_k, cb) => cb && cb({}), set: (_v, cb) => cb && cb() },
+      onChanged: { addListener: (fn) => storageListeners.push(fn) }
+    },
+    tabs: { query: (_q, cb) => cb && cb([{ id: 1, url: 'https://example.com/', title: 'Example' }]) }
+  }
+</script>
+<script src="/browser-ext/extension/content/content.js"></script>
+</body></html>

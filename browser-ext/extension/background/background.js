@@ -4,8 +4,9 @@
  * Owns the things a page cannot do:
  *
  *  - host base URL + token + URL→directory rules (chrome.storage.local),
- *  - the toolbar action: toggles the floating window, or opens the WebUI in a
- *    standalone window on pages that cannot host content scripts,
+ *  - the toolbar action, keyboard shortcut, and context menu entries that open
+ *    the floating window (minimal by default) or the full view,
+ *  - the busy badge,
  *  - running page tools: the embedded page asks (`dsh:exec-tool` through the
  *    content script), and we forward to that tab's `page-tools.js`,
  *  - visible-tab screenshots for `page_screenshot`.
@@ -17,6 +18,9 @@
 const DEFAULTS = {
   baseUrl: 'http://127.0.0.1:3080',
   token: '',
+  // 'minimal' keeps only the composer + the latest assistant turn (transparent);
+  // 'standard' is the full 520px window.
+  uiMode: 'minimal',
   // Rules: [{ pattern: 'github.com/foo/*', dir: '/Users/me/work/foo' }]
   rules: []
 }
@@ -35,9 +39,13 @@ async function setConfig(patch) {
   return next
 }
 
-function embedUrl(cfg) {
+function embedUrl(cfg, options = {}) {
   const base = String(cfg.baseUrl || '').replace(/\/+$/, '')
-  return `${base}${EMBED_PATH}?token=${encodeURIComponent(cfg.token || '')}`
+  const params = new URLSearchParams()
+  params.set('token', cfg.token || '')
+  params.set('mode', options.mode === 'standard' ? 'standard' : 'minimal')
+  if (options.prefill) params.set('prefill', options.prefill)
+  return `${base}${EMBED_PATH}?${params.toString()}`
 }
 
 /** Match a URL against a rule pattern; return the mapped dir or null. */
@@ -111,32 +119,90 @@ async function openOptions() {
   await chrome.runtime.openOptionsPage().catch(() => {})
 }
 
-async function openStandalone() {
+async function openStandalone(options = {}) {
   const cfg = await getConfig()
   if (!cfg.token) {
     await openOptions()
     return
   }
-  const width = 520
-  const height = 800
-  await chrome.windows.create({ url: embedUrl(cfg), type: 'popup', width, height })
+  await chrome.windows.create({
+    url: embedUrl(cfg, options),
+    type: 'popup',
+    width: options.mode === 'standard' ? 520 : 540,
+    height: options.mode === 'standard' ? 800 : 420
+  })
+}
+
+/** Open the window in the given tab, falling back to a standalone popup. */
+async function openForTab(tab, options = {}) {
+  const cfg = await getConfig()
+  const mode = options.mode === 'standard' ? 'standard' : cfg.uiMode === 'standard' ? 'standard' : 'minimal'
+  const message = { type: 'dsh:open', mode, prefill: options.prefill || '' }
+  if (tab && tab.id) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, message)
+      return
+    } catch {
+      // chrome:// pages, the Web Store, PDF viewer, etc. have no content script.
+    }
+  }
+  await openStandalone({ mode, prefill: options.prefill })
+}
+
+async function setBusyBadge(busy) {
+  try {
+    await chrome.action.setBadgeText({ text: busy ? '●' : '' })
+    if (busy) await chrome.action.setBadgeBackgroundColor({ color: '#f5a524' })
+  } catch {
+    /* badge APIs can fail while the worker is shutting down */
+  }
+}
+
+async function createMenus() {
+  await chrome.contextMenus.removeAll()
+  chrome.contextMenus.create({ id: 'dsh-ask-selection', title: '用 DSH 询问', contexts: ['selection'] })
+  chrome.contextMenus.create({ id: 'dsh-open', title: '打开 DSH', contexts: ['page'] })
+  chrome.contextMenus.create({ id: 'dsh-open-standard', title: '打开完整视图', contexts: ['page'] })
 }
 
 chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab || !tab.id) {
-    await openStandalone()
+  const cfg = await getConfig()
+  await openForTab(tab, { mode: cfg.uiMode })
+})
+
+chrome.commands.onCommand.addListener(async (command) => {
+  const tab = await activeTab()
+  const cfg = await getConfig()
+  if (command === 'open-dsh') {
+    await openForTab(tab, { mode: cfg.uiMode })
     return
   }
-  try {
-    await chrome.tabs.sendMessage(tab.id, { type: 'dsh:toggle' })
-  } catch {
-    // chrome:// pages, the Web Store, PDF viewer, etc. have no content script.
-    await openStandalone()
+  if (command === 'toggle-mode' && tab && tab.id) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: 'dsh:toggle-mode' })
+    } catch {
+      /* no content script on this page */
+    }
+  }
+})
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'dsh-ask-selection') {
+    void openForTab(tab, { mode: 'minimal', prefill: info.selectionText || '' })
+  } else if (info.menuItemId === 'dsh-open') {
+    void openForTab(tab, { mode: 'minimal' })
+  } else if (info.menuItemId === 'dsh-open-standard') {
+    void openForTab(tab, { mode: 'standard' })
   }
 })
 
 chrome.runtime.onInstalled.addListener(async (details) => {
+  await createMenus()
   if (details.reason === 'install') await openOptions()
+})
+
+chrome.runtime.onStartup.addListener(() => {
+  void createMenus()
 })
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -157,6 +223,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         break
       case 'dsh:exec-tool':
         sendResponse(await runPageTool(msg, sender))
+        break
+      case 'dsh:badge':
+        await setBusyBadge(Boolean(msg.busy))
+        sendResponse({ ok: true })
         break
       case 'dsh:open-options':
         await openOptions()

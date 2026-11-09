@@ -47,7 +47,7 @@ try {
   let target
   for (let i = 0; i < 100; i++) {
     try {
-      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()
+      const list = await (await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2000) })).json()
       target = list.find((t) => t.type === 'page')
       if (target) break
     } catch { /* not up yet */ }
@@ -91,7 +91,7 @@ try {
   await send('Runtime.enable')
   await send('Network.enable')
   await send('Page.enable')
-  await send('Page.navigate', { url: `${BASE}/browser-ui/?token=${encodeURIComponent(TOKEN)}` })
+  await send('Page.navigate', { url: `${BASE}/browser-ui/?token=${encodeURIComponent(TOKEN)}&mode=standard` })
 
   // 1. the real WebUI booted
   let booted = false
@@ -161,7 +161,10 @@ try {
   }
   check('bound workspace has a session', Boolean(sessionId), String(sessionId || ''))
 
-  // 5. a prompt streams back through the mux
+  // 5. a prompt streams back through the mux — prompt the session the window
+  // actually has open (binding may reuse or create a blank one).
+  const openSessionId = await evaluate(`(window.__DSH_EMBED__ && window.__DSH_EMBED__.mainSessionId) ? window.__DSH_EMBED__.mainSessionId() : null`)
+  if (openSessionId) sessionId = openSessionId
   if (sessionId) {
     const sent = await evaluate(`(async () => {
       const res = await window.__DSH_TRANSPORT__.fetch('api/session/prompt', {

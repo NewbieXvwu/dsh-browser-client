@@ -26,10 +26,10 @@ html[data-dsh-embed] {
 html[data-dsh-embed] [data-shell-leading] {
   display: none !important;
 }
-html[data-dsh-embed] [data-sidebar-drawer][data-sidebar-collapsed] [data-shell-leading] {
+html[data-dsh-mode="standard"] [data-sidebar-drawer][data-sidebar-collapsed] [data-shell-leading] {
   display: block !important;
 }
-html[data-dsh-embed] [data-sidebar-drawer][data-sidebar-collapsed] [data-sidebar-opener] {
+html[data-dsh-mode="standard"] [data-sidebar-drawer][data-sidebar-collapsed] [data-sidebar-opener] {
   position: fixed; top: 10px; left: 10px; z-index: 20;
   width: 30px; height: 30px; border-radius: 8px;
   color: var(--dsw-alias-label-secondary, #9aa3af);
@@ -37,7 +37,7 @@ html[data-dsh-embed] [data-sidebar-drawer][data-sidebar-collapsed] [data-sidebar
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: background-color .15s ease, color .15s ease;
 }
-html[data-dsh-embed] [data-sidebar-drawer][data-sidebar-collapsed] [data-sidebar-opener]:hover {
+html[data-dsh-mode="standard"] [data-sidebar-drawer][data-sidebar-collapsed] [data-sidebar-opener]:hover {
   color: var(--dsw-alias-label-primary, #f5f7fa);
   background: rgba(255, 255, 255, 0.1);
 }
@@ -77,4 +77,199 @@ html[data-dsh-embed] [data-slot="sidebar"] [data-window-drag] {
 /* A floating window never needs a full-page drawer scrim. */
 html[data-dsh-embed] [data-sidebar-mask] {
   backdrop-filter: none;
+}
+
+/* ── minimal mode ────────────────────────────────────────────────────────────
+ * The minimal presentation shows the last model reply and the input box and
+ * nothing else. Everything is transparent: the page behind stays visible.
+ * The extension sizes the iframe to the measured content height, so a short
+ * reply never covers more of the page than the text itself.
+ */
+
+html[data-dsh-mode="minimal"] {
+  background: transparent !important;
+  --dsw-alias-bg-base: transparent !important;
+  --dsw-specific-input-major: transparent !important;
+  --dsw-specific-bubble: transparent !important;
+  --dsw-elevation-soft: none !important;
+  --dsw-elevation-stroke: none !important;
+  --dsh-min-label: #f5f7fa;
+  --dsh-min-halo: none;
+}
+/* The theme declares its palette on <body>, so the override must live there
+   too or `var(--dsw-alias-bg-base)` keeps resolving to the dark surface. */
+html[data-dsh-mode="minimal"] body,
+html[data-dsh-mode="minimal"] body[data-ds-dark-theme] {
+  --dsw-alias-bg-base: transparent !important;
+  --dsw-specific-input-major: transparent !important;
+  --dsw-specific-bubble: transparent !important;
+  --dsw-elevation-soft: none !important;
+  --dsw-elevation-stroke: none !important;
+}
+html[data-dsh-mode="minimal"][data-dsh-tone="light"] {
+  --dsh-min-label: #0f1115;
+  --dsh-min-halo: none;
+}
+
+/* `color-scheme: dark` makes Chromium paint an opaque dark canvas behind a
+   transparent document; the minimal window must stay see-through. */
+html[data-dsh-mode="minimal"] {
+  color-scheme: light;
+}
+html[data-dsh-mode="minimal"],
+html[data-dsh-mode="minimal"] body,
+html[data-dsh-mode="minimal"] #root,
+html[data-dsh-mode="minimal"] [data-slot="root"],
+html[data-dsh-mode="minimal"] [data-slot="root"] > *,
+html[data-dsh-mode="minimal"] [data-conversation-scroll],
+html[data-dsh-mode="minimal"] [data-composer-seat],
+html[data-dsh-mode="minimal"] [data-composer-card],
+html[data-dsh-mode="minimal"] [data-composer-input],
+html[data-dsh-mode="minimal"] [data-chat-flow] {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* One column: no rail, no sidebar, no right bar. */
+html[data-dsh-mode="minimal"] [data-slot="root"] > div {
+  grid-template-columns: 0px minmax(0, 1fr) 0px !important;
+}
+html[data-dsh-mode="minimal"] [data-slot="sidebar"],
+html[data-dsh-mode="minimal"] div:has(> [data-slot="sidebar"]),
+html[data-dsh-mode="minimal"] [data-slot="rightbar"],
+html[data-dsh-mode="minimal"] div:has(> [data-slot="rightbar"]),
+html[data-dsh-mode="minimal"] [data-shell-leading],
+html[data-dsh-mode="minimal"] [data-shell-bottom],
+html[data-dsh-mode="minimal"] [data-sidebar-mask],
+html[data-dsh-mode="minimal"] header[data-window-drag],
+html[data-dsh-mode="minimal"] [data-conversation-tabs] {
+  display: none !important;
+}
+
+/* Only the newest reply (or the newest turn error) is on screen; the client
+   plugin marks it with data-dsh-last after every render. The user's own
+   prompt is never shown — the composer holds what was typed. */
+html[data-dsh-mode="minimal"] [data-chat-flow-kind="user"],
+html[data-dsh-mode="minimal"] [data-chat-flow-kind="turn-process"],
+html[data-dsh-mode="minimal"] [data-chat-flow-kind="turn-tail"],
+html[data-dsh-mode="minimal"] [data-chat-flow-kind]:not([data-dsh-last]) {
+  display: none !important;
+}
+html[data-dsh-mode="minimal"] [data-chat-flow-kind][data-dsh-last] * {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+html[data-dsh-mode="minimal"] [data-chat-flow-kind][data-dsh-last] {
+  color: var(--dsh-min-label) !important;
+  text-shadow: var(--dsh-min-halo);
+  background: transparent !important;
+  font-size: 14px;
+  line-height: 1.65;
+}
+html[data-dsh-mode="minimal"] [data-chat-flow-kind][data-dsh-last] :is(p, span, li, h1, h2, h3, h4, h5, h6, td, th, blockquote, strong, em, a, code, pre) {
+  color: inherit !important;
+  text-shadow: inherit;
+}
+/* The Harness markup paints text with its own !important colors; fill color
+   wins over them without touching icons. */
+html[data-dsh-mode="minimal"] [data-chat-flow-kind][data-dsh-last],
+html[data-dsh-mode="minimal"] [data-chat-flow-kind][data-dsh-last] * {
+  -webkit-text-fill-color: var(--dsh-min-label) !important;
+}
+html[data-dsh-mode="minimal"] [data-chat-flow-kind][data-dsh-last] :is(pre, code, table, blockquote) {
+  background: transparent !important;
+  border: 0 !important;
+}
+html[data-dsh-mode="minimal"] [data-chat-flow-kind][data-dsh-last] :is(img, video) {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* Composer: an input with no box at all. */
+html[data-dsh-mode="minimal"] [data-composer-card] {
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+html[data-dsh-mode="minimal"] [data-input-scroll] {
+  padding: 0 !important;
+}
+html[data-dsh-mode="minimal"] [data-composer-input] {
+  color: var(--dsh-min-label) !important;
+  -webkit-text-fill-color: var(--dsh-min-label) !important;
+  caret-color: var(--dsh-min-label);
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 22px;
+  text-shadow: var(--dsh-min-halo);
+}
+html[data-dsh-mode="minimal"] [data-placeholder]::before {
+  color: var(--dsh-min-label) !important;
+  -webkit-text-fill-color: var(--dsh-min-label) !important;
+  opacity: 0.55;
+}
+
+/* The dock is empty chrome except while a turn runs; then the page marks it
+   with .dsh-min-stop and only the stop button stays visible. */
+html[data-dsh-mode="minimal"] [data-composer-dock] {
+  display: none;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+html[data-dsh-mode="minimal"] [data-composer-dock].dsh-min-stop {
+  display: flex !important;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 2px;
+}
+html[data-dsh-mode="minimal"] [data-composer-dock].dsh-min-stop > * {
+  display: none !important;
+}
+html[data-dsh-mode="minimal"] [data-composer-dock].dsh-min-stop > .dsh-min-stop-seat {
+  display: flex !important;
+  align-items: center;
+}
+html[data-dsh-mode="minimal"] [data-composer-dock] button {
+  color: var(--dsh-min-label) !important;
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  text-shadow: var(--dsh-min-halo);
+}
+
+/* Every painted surface under the conversation column is transparent; the
+   reply and the composer carry their own contrast. */
+html[data-dsh-mode="minimal"] [data-slot="main"],
+html[data-dsh-mode="minimal"] [data-slot="main"] * {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* The action row (attach, permission chip, send) is not needed: Enter sends. */
+html[data-dsh-mode="minimal"] [data-composer-card] > .dsh-min-actions {
+  display: none !important;
+}
+
+/* Composer chrome that is not the editor. */
+html[data-dsh-mode="minimal"] [data-slot="conversation.input.permissions"],
+html[data-dsh-mode="minimal"] [data-slot="conversation.input.plan"],
+html[data-dsh-mode="minimal"] [data-slot="conversation.input.left"],
+html[data-dsh-mode="minimal"] [data-slot="conversation.input.right"],
+html[data-dsh-mode="minimal"] [data-slot="conversation.input.model"],
+html[data-dsh-mode="minimal"] [data-slot="conversation.input.activity"],
+html[data-dsh-mode="minimal"] [data-slot="conversation.input.attachments"]:empty,
+html[data-dsh-mode="minimal"] [data-shimmer-decoration],
+html[data-dsh-mode="minimal"] [data-message-bubble],
+html[data-dsh-mode="minimal"] [data-turn-tail],
+html[data-dsh-mode="minimal"] [data-turn-process] {
+  display: none !important;
+}
+
+/* The page only scrolls for very long replies; a short reply sits at the
+   bottom, flush with the input. */
+html[data-dsh-mode="minimal"] [data-conversation-scroll] {
+  padding: 0 !important;
 }

@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "DSH Browser Client",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DeepSeek Harness 浏览器浮窗客户端：悬浮窗就是 DSH WebUI，当前页面所在目录自动成为会话工作区。",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "contextMenus"
   ],
   "host_permissions": [
     "http://127.0.0.1/*",
@@ -40,5 +41,21 @@
   "options_ui": {
     "page": "options/options.html",
     "open_in_tab": true
+  },
+  "commands": {
+    "open-dsh": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "打开 DSH 悬浮窗"
+    },
+    "toggle-mode": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E",
+        "mac": "Command+Shift+E"
+      },
+      "description": "切换极简 / 完整视图"
+    }
   }
 }

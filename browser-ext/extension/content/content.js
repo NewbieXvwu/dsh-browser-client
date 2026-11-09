@@ -1,22 +1,28 @@
 /**
- * content.js — the floating launcher, the window frame, and the page bridge.
+ * content.js — the floating window frame and the page bridge.
  *
  * The window itself is the real DSH WebUI, served by the host plugin at
  * `${baseUrl}/browser-ui/`. The extension owns three things only:
  *
- *   1. a neutral launcher button (44px, monochrome — no gradients, no mascot),
- *   2. an iframe that loads that page lazily,
+ *   1. an iframe that loads that page lazily,
+ *   2. the two presentations of that page — `minimal` (default) and `standard`,
  *   3. the page ↔ extension bridge for what only an extension can do:
  *      workspace binding by page URL, and running `page_*` tools in the
  *      current tab on behalf of the host's control channel.
  *
+ * There is no always-on-screen launcher: the window is summoned by the
+ * keyboard shortcut, the context menu, or the toolbar action, and dismissed
+ * with Esc or a click anywhere on the page.
+ *
  * Messaging contract with the embedded page (`assets/transport.js`,
  * `assets/control.js`, `lib/client.js`):
  *
- *   page  → us   dsh:ready / dsh:busy / dsh:open-settings / dsh:bind-failed
+ *   page  → us   dsh:ready / dsh:busy / dsh:close / dsh:size
+ *                dsh:open-settings / dsh:bind-failed
  *                dsh:tool       run a page tool in this tab
  *                dsh:ask        ask the user a question
  *   us    → page dsh:page-url   current tab URL + resolved directory
+ *                dsh:set-mode / dsh:tone / dsh:prefill
  *                dsh:tool-result / dsh:ask-result
  */
 (function () {
@@ -25,10 +31,16 @@
   window.__DSH_BROWSER_CONTENT__ = true
 
   const EMBED_PATH = '/browser-ui/'
+  const MIN_HEIGHT = 84
 
   let config = null
   let ui = null
   let ask = null
+  let mode = 'minimal'
+  let visible = false
+  let pageReady = false
+  let pendingPrefill = null
+  let lastTone = ''
 
   function send(message) {
     return new Promise((resolve) => {
@@ -54,8 +66,13 @@
     }
   }
 
-  function panelUrl(base, token) {
-    return `${String(base || '').replace(/\/+$/, '')}${EMBED_PATH}?token=${encodeURIComponent(token || '')}`
+  function panelUrl(base, token, nextMode) {
+    const root = String(base || '').replace(/\/+$/, '')
+    return `${root}${EMBED_PATH}?token=${encodeURIComponent(token || '')}&mode=${encodeURIComponent(nextMode)}`
+  }
+
+  function normalizeMode(value) {
+    return value === 'standard' ? 'standard' : 'minimal'
   }
 
   // ── shadow UI ─────────────────────────────────────────────────────────────
@@ -74,46 +91,56 @@
     style.textContent = `
       :host { all: initial; }
       * { box-sizing: border-box; }
-      .dsh-launcher {
-        position: fixed; right: 20px; bottom: 20px;
-        width: 44px; height: 44px; padding: 0;
-        border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, 0.14);
-        background: #111113; color: #f5f7fa;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer; pointer-events: auto;
-        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
-        transition: transform .16s ease, background-color .16s ease, box-shadow .16s ease;
-        -webkit-font-smoothing: antialiased;
-      }
-      .dsh-launcher:hover { transform: translateY(-1px); background: #1b1b1c; box-shadow: 0 14px 32px rgba(0,0,0,.42); }
-      .dsh-launcher:active { transform: translateY(0); }
-      .dsh-launcher svg { width: 20px; height: 20px; display: block; }
-      .dsh-launcher .dsh-dot {
-        position: absolute; top: -1px; right: -1px;
-        width: 10px; height: 10px; border-radius: 50%;
-        background: #f5a524; border: 2px solid #111113; display: none;
-      }
-      .dsh-launcher.busy .dsh-dot { display: block; }
+
       .dsh-frame {
-        position: fixed; right: 20px; bottom: 76px;
+        position: fixed; z-index: 2147483647;
+        display: none; pointer-events: auto;
+        border: 0; background: transparent;
+      }
+      .dsh-frame.open { display: block; }
+
+      /* 极简：底部居中、透明、无边框，高度由页面内容决定。 */
+      .dsh-frame.minimal {
+        left: 50%; bottom: 28px; transform: translateX(-50%);
+        width: min(680px, calc(100vw - 32px));
+        height: var(--dsh-h, ${MIN_HEIGHT}px);
+        border-radius: 0; box-shadow: none; overflow: visible;
+      }
+      /* 需要回答问题/授权时给对话框留出空间（这是唯一会临时出现的块）。 */
+      .dsh-frame.minimal.asking { height: min(440px, 64vh); }
+
+      /* 完整：沿用原来的 520×760 深色窗口。 */
+      .dsh-frame.standard {
+        right: 20px; bottom: 76px;
         width: min(520px, calc(100vw - 40px));
         height: min(760px, calc(100vh - 96px));
         border-radius: 16px;
         border: 1px solid rgba(255, 255, 255, 0.09);
         background: #151517;
         box-shadow: 0 24px 72px rgba(0, 0, 0, 0.52);
-        overflow: hidden; pointer-events: auto;
-        display: none; flex-direction: column;
+        overflow: hidden;
       }
-      .dsh-frame.open { display: flex; }
-      .dsh-frame iframe { width: 100%; height: 100%; border: none; background: #151517; }
+      .dsh-frame.minimal.asking {
+        border-radius: 14px;
+        background: rgba(18, 18, 20, 0.82);
+        backdrop-filter: blur(18px) saturate(1.1);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+      }
+
+      .dsh-frame iframe {
+        width: 100%; height: 100%; border: none;
+        background: transparent; display: block; color-scheme: normal;
+      }
+
       .dsh-frame .dsh-state {
         position: absolute; inset: 0;
         display: none; align-items: center; justify-content: center;
-        padding: 32px; text-align: center;
-        color: #9aa0aa; font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
-        background: #151517;
+        padding: 24px; text-align: center;
+        border-radius: inherit;
+        color: #c9ced6;
+        font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+        background: rgba(12, 12, 14, 0.86);
       }
       .dsh-frame.error .dsh-state { display: flex; }
       .dsh-frame.error iframe { visibility: hidden; }
@@ -121,7 +148,7 @@
       .dsh-ask {
         position: absolute; inset: 0; z-index: 5;
         display: flex; align-items: center; justify-content: center;
-        padding: 24px; background: rgba(9, 9, 11, 0.55);
+        padding: 20px; background: rgba(9, 9, 11, 0.55);
         font: 13px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
       }
       .dsh-ask[hidden] { display: none; }
@@ -158,25 +185,11 @@
     return style
   }
 
-  function launcherSvg() {
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M4.5 6.5A2.5 2.5 0 0 1 7 4h10a2.5 2.5 0 0 1 2.5 2.5v7A2.5 2.5 0 0 1 17 16H9.8l-3.6 3v-3H7a2.5 2.5 0 0 1-2.5-2.5z"/>
-      <path d="M8.5 9h7M8.5 12h4.5"/>
-    </svg>`
-  }
-
   function buildUi(shadow) {
     shadow.appendChild(buildStyle())
 
-    const launcher = document.createElement('button')
-    launcher.className = 'dsh-launcher'
-    launcher.type = 'button'
-    launcher.setAttribute('aria-label', 'DSH')
-    launcher.setAttribute('title', 'DSH')
-    launcher.innerHTML = launcherSvg() + '<span class="dsh-dot" aria-hidden="true"></span>'
-
     const frame = document.createElement('div')
-    frame.className = 'dsh-frame'
+    frame.className = 'dsh-frame minimal'
 
     const iframe = document.createElement('iframe')
     iframe.setAttribute('allow', 'clipboard-write; clipboard-read')
@@ -204,10 +217,8 @@
     frame.appendChild(state)
     frame.appendChild(askEl)
     shadow.appendChild(frame)
-    shadow.appendChild(launcher)
 
     return {
-      launcher,
       frame,
       iframe,
       state,
@@ -217,7 +228,7 @@
       askOptions: askEl.querySelector('.dsh-ask-options'),
       askInput: askEl.querySelector('.dsh-ask-input'),
       loaded: false,
-      opened: false
+      loadedMode: ''
     }
   }
 
@@ -244,6 +255,75 @@
     })
   }
 
+  function flushPrefill() {
+    if (!pendingPrefill || !pageReady) return
+    const text = pendingPrefill
+    pendingPrefill = null
+    postToPage({ type: 'dsh:prefill', text })
+  }
+
+  /** Effective background colour of whatever paints at a viewport point. */
+  function backgroundAt(x, y) {
+    try {
+      let el = document.elementFromPoint(x, y)
+      while (el && el !== document.documentElement) {
+        // Our own overlay and its iframe are transparent, never a page colour.
+        if (el === ui?.frame || el === ui?.host) break
+        const bg = getComputedStyle(el).backgroundColor
+        if (bg && bg !== 'transparent' && !/^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(bg)) return bg
+        el = el.parentElement
+      }
+      const bodyBg = getComputedStyle(document.body).backgroundColor
+      if (bodyBg && bodyBg !== 'transparent' && !/^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(bodyBg)) return bodyBg
+      const htmlBg = getComputedStyle(document.documentElement).backgroundColor
+      if (htmlBg && htmlBg !== 'transparent' && !/^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(htmlBg)) return htmlBg
+    } catch {
+      /* detached document */
+    }
+    return 'rgb(255, 255, 255)'
+  }
+
+  /**
+   * Sample the page *around* the window (the iframe covers the centre), so the
+   * minimal window can flip its text between dark-on-light and light-on-dark.
+   */
+  function sampleTone() {
+    let rect = null
+    try {
+      rect = ui?.frame?.getBoundingClientRect()
+    } catch {
+      /* detached document */
+    }
+    const points = rect && rect.width > 0
+      ? [
+          [rect.left - 14, rect.top + 18],
+          [rect.right + 14, rect.top + 18],
+          [rect.left + rect.width / 2, rect.top - 14]
+        ]
+      : [[window.innerWidth / 2, window.innerHeight - 48]]
+    let total = 0
+    let count = 0
+    for (const [rawX, rawY] of points) {
+      const x = Math.round(Math.min(window.innerWidth - 1, Math.max(0, rawX)))
+      const y = Math.round(Math.min(window.innerHeight - 1, Math.max(0, rawY)))
+      const color = backgroundAt(x, y)
+      const match = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/.exec(color)
+      if (!match) continue
+      total += (0.2126 * Number(match[1]) + 0.7152 * Number(match[2]) + 0.0722 * Number(match[3])) / 255
+      count += 1
+    }
+    if (count === 0) return 'light'
+    return total / count > 0.55 ? 'light' : 'dark'
+  }
+
+  function publishTone() {
+    if (!visible) return
+    const tone = sampleTone()
+    if (tone === lastTone) return
+    lastTone = tone
+    postToPage({ type: 'dsh:tone', tone })
+  }
+
   async function runToolFromPage(data) {
     const reply = await send({ type: 'dsh:exec-tool', tool: data.tool, args: data.args })
     postToPage({
@@ -258,7 +338,7 @@
   function showAsk(data) {
     if (!ui) return
     if (ask) finishAsk(null)
-    if (!ui.opened) void open()
+    if (!visible) void open()
     ask = {
       requestId: data.requestId,
       options: Array.isArray(data.options) ? data.options.map(String) : []
@@ -277,6 +357,7 @@
     ui.askInput.value = ''
     ui.askInput.hidden = ask.options.length > 0
     ui.askEl.hidden = false
+    ui.frame.classList.add('asking')
     if (ask.options.length === 0) {
       try { ui.askInput.focus() } catch { /* not focusable yet */ }
     }
@@ -286,7 +367,10 @@
     if (!ask) return
     const current = ask
     ask = null
-    if (ui) ui.askEl.hidden = true
+    if (ui) {
+      ui.askEl.hidden = true
+      ui.frame.classList.remove('asking')
+    }
     postToPage({
       type: 'dsh:ask-result',
       requestId: current.requestId,
@@ -297,7 +381,36 @@
 
   // ── frame lifecycle ───────────────────────────────────────────────────────
 
-  async function ensureFrame() {
+  // The host element mirrors a little state for the page (and for tests);
+  // everything sensitive stays inside the closed shadow root.
+  function publishState() {
+    if (!ui) return
+    ui.host.setAttribute('data-dsh-mode', mode)
+    ui.host.setAttribute('data-dsh-visible', visible ? 'true' : 'false')
+    ui.host.setAttribute('data-dsh-height', String(Math.round(ui.frame.getBoundingClientRect().height)))
+  }
+
+  function setMode(next) {
+    const normalized = normalizeMode(next)
+    const changed = normalized !== mode
+    mode = normalized
+    if (!ui) return
+    ui.frame.classList.toggle('minimal', normalized === 'minimal')
+    ui.frame.classList.toggle('standard', normalized === 'standard')
+    if (normalized === 'minimal') ui.frame.style.removeProperty('--dsh-h')
+    if (changed && ui.loaded) postToPage({ type: 'dsh:set-mode', mode: normalized })
+    publishState()
+  }
+
+  function applyHeight(height) {
+    if (!ui || mode !== 'minimal') return
+    const max = Math.round(window.innerHeight * 0.66)
+    const next = Math.max(MIN_HEIGHT, Math.min(max, Math.round(Number(height) || 0)))
+    ui.frame.style.setProperty('--dsh-h', `${next}px`)
+    publishState()
+  }
+
+  async function ensureFrame(nextMode) {
     if (!ui) return false
     if (ui.loaded) return true
     const cfg = await getConfig()
@@ -306,41 +419,53 @@
       ui.frame.classList.add('error')
       return false
     }
+    setMode(nextMode)
     ui.loaded = true
-    ui.iframe.src = panelUrl(cfg.baseUrl, cfg.token)
+    ui.loadedMode = mode
+    ui.iframe.src = panelUrl(cfg.baseUrl, cfg.token, mode)
     return true
   }
 
-  async function open() {
+  async function open(options = {}) {
     if (!ui) return
-    const ok = await ensureFrame()
-    ui.frame.classList.toggle('open', ok)
-    ui.frame.classList.toggle('error', !ok)
-    ui.opened = ok
-    if (ok) {
-      await syncPage()
-      try { ui.iframe.contentWindow.focus() } catch { /* not focusable yet */ }
+    const cfg = await getConfig()
+    const requested = normalizeMode(options.mode || cfg.uiMode || mode)
+    if (options.prefill && String(options.prefill).trim() !== '') pendingPrefill = String(options.prefill)
+    const ok = await ensureFrame(requested)
+    if (!ok) {
+      ui.frame.classList.toggle('open', true)
+      ui.frame.classList.toggle('error', true)
+      visible = true
+      publishState()
+      return
     }
+    if (ui.loaded && mode !== requested) setMode(requested)
+    ui.frame.classList.add('open')
+    ui.frame.classList.remove('error')
+    visible = true
+    publishState()
+    await syncPage()
+    publishTone()
+    try { ui.iframe.contentWindow.focus() } catch { /* not focusable yet */ }
+    flushPrefill()
   }
 
   function close() {
     if (!ui) return
     ui.frame.classList.remove('open')
-    ui.opened = false
+    visible = false
+    publishState()
+    if (ask) finishAsk(null)
+    void send({ type: 'dsh:badge', busy: false })
   }
 
-  async function toggle() {
+  async function toggle(options = {}) {
     if (!ui) return
-    if (ui.opened) close()
-    else await open()
+    if (visible) close()
+    else await open(options)
   }
 
   function bindEvents() {
-    ui.launcher.addEventListener('click', (event) => {
-      event.stopPropagation()
-      void toggle()
-    })
-
     ui.askEl.querySelector('.dsh-ask-submit:not(.dsh-ask-cancel)').addEventListener('click', () => {
       finishAsk(ui.askInput.value.trim() || null)
     })
@@ -355,13 +480,23 @@
     window.addEventListener('message', (event) => {
       const data = event.data
       if (!data || typeof data !== 'object') return
-      if (event.source !== ui.iframe.contentWindow) return
+      if (!ui || event.source !== ui.iframe.contentWindow) return
       switch (data.type) {
-        case 'dsh:busy':
-          ui.launcher.classList.toggle('busy', Boolean(data.busy))
-          break
         case 'dsh:ready':
+          pageReady = true
+          if (ui) ui.host.setAttribute('data-dsh-ready', 'true')
           void syncPage()
+          publishTone()
+          flushPrefill()
+          break
+        case 'dsh:size':
+          applyHeight(data.height)
+          break
+        case 'dsh:close':
+          close()
+          break
+        case 'dsh:busy':
+          void send({ type: 'dsh:badge', busy: Boolean(data.busy) })
           break
         case 'dsh:open-settings':
           void send({ type: 'dsh:open-options' })
@@ -380,37 +515,80 @@
       }
     })
 
+    // Esc closes from the page; inside the iframe the page itself posts dsh:close.
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && visible) close()
+    }, true)
+
+    // Any click in the page document is outside the floating window: the iframe
+    // is a separate document and never bubbles its clicks here.
+    document.addEventListener('mousedown', (event) => {
+      if (!visible) return
+      if (event.composedPath().includes(ui.host)) return
+      close()
+    }, true)
+
+    let toneTimer = 0
+    const scheduleTone = () => {
+      if (!visible) return
+      clearTimeout(toneTimer)
+      toneTimer = setTimeout(publishTone, 120)
+    }
+    window.addEventListener('scroll', scheduleTone, { passive: true, capture: true })
+    window.addEventListener('resize', scheduleTone, { passive: true })
+
     // SPA navigation: the bound directory may change.
     let lastUrl = location.href
     const observer = new MutationObserver(() => {
       if (location.href === lastUrl) return
       lastUrl = location.href
-      if (ui.opened) void syncPage()
+      if (visible) void syncPage()
     })
     observer.observe(document.documentElement, { childList: true, subtree: true })
 
     chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-      if (!message || message.type !== 'dsh:toggle') return
-      void toggle().then(() => sendResponse({ ok: true }))
+      if (!message || typeof message.type !== 'string') return
+      const run = async () => {
+        switch (message.type) {
+          case 'dsh:toggle':
+            await toggle()
+            break
+          case 'dsh:toggle-mode':
+            if (!visible) await open()
+            else setMode(mode === 'minimal' ? 'standard' : 'minimal')
+            break
+          case 'dsh:open':
+            await open({ mode: message.mode, prefill: message.prefill })
+            break
+          default:
+            return
+        }
+        sendResponse({ ok: true })
+      }
+      void run()
       return true
     })
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'local' || !changes.dshConfig) return
       config = null
-      if (!ui.opened) return
+      lastTone = ''
+      if (!visible) return
       ui.loaded = false
-      void ensureFrame().then((ok) => {
+      pageReady = false
+      void ensureFrame(mode).then((ok) => {
         if (!ok) return
         ui.frame.classList.remove('error')
         void syncPage()
+        publishTone()
       })
     })
   }
 
   try {
-    const { shadow } = createShadowHost()
+    const { host, shadow } = createShadowHost()
     ui = buildUi(shadow)
+    ui.host = host
     bindEvents()
   } catch (err) {
     console.error('[dsh-browser-client] init failed', err)

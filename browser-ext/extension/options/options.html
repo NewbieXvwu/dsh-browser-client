@@ -35,6 +35,18 @@
     </section>
 
     <section>
+      <h2>浮窗</h2>
+      <div class="field">
+        <label for="ui-mode">默认打开方式</label>
+        <select id="ui-mode">
+          <option value="minimal">极简（透明，仅输入框与最新回复）</option>
+          <option value="standard">完整视图</option>
+        </select>
+        <p class="hint">快捷键 <kbd>⌘⇧K</kbd> / <kbd>Ctrl+Shift+K</kbd> 打开，<kbd>⌘⇧E</kbd> / <kbd>Ctrl+Shift+E</kbd> 切换，“用 DSH 询问”会把选中文字带进输入框，<kbd>Esc</kbd> 关闭。</p>
+      </div>
+    </section>
+
+    <section>
       <h2>页面目录规则</h2>
       <p class="hint">命中规则的页面会自动绑定到对应目录；没有规则时，悬浮窗使用最近的工作区。</p>
       <div id="rules" class="rules"></div>

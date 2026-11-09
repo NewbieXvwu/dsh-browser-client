@@ -67,6 +67,7 @@
     const cfg = (await send({ type: 'dsh:get-config' })) || {}
     $('base-url').value = cfg.baseUrl || ''
     $('token').value = cfg.token || ''
+    $('ui-mode').value = cfg.uiMode === 'standard' ? 'standard' : 'minimal'
     renderRules(Array.isArray(cfg.rules) ? cfg.rules : [])
   }
 
@@ -74,7 +75,8 @@
     const status = $('status')
     const patch = {
       baseUrl: $('base-url').value.trim().replace(/\/+$/, ''),
-      token: $('token').value.trim()
+      token: $('token').value.trim(),
+      uiMode: $('ui-mode').value === 'standard' ? 'standard' : 'minimal'
     }
     if (!/^https?:\/\//.test(patch.baseUrl)) {
       setStatus(status, '宿主地址必须以 http:// 或 https:// 开头', 'bad')

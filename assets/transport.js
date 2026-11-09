@@ -26,7 +26,9 @@
   var script = document.currentScript;
   var uiPrefix = (script && script.getAttribute('data-ui-prefix')) || '/browser-ui';
   var extPrefix = (script && script.getAttribute('data-ext-prefix')) || '/ext-api';
-  var embed = { token: token, uiPrefix: uiPrefix, extPrefix: extPrefix };
+  var mode = params.get('mode') === 'standard' ? 'standard' : 'minimal';
+  var prefill = params.get('prefill') || '';
+  var embed = { token: token, uiPrefix: uiPrefix, extPrefix: extPrefix, mode: mode, prefill: prefill };
 
   // The token is a bearer capability, never part of the visible address.
   try {
@@ -51,8 +53,9 @@
 
   function install() {
     // Mark the document before the first paint so `embed.css` applies without
-    // a flash of the full-page shell.
+    // a flash of the full-page shell or of the standard 520px window.
     document.documentElement.setAttribute('data-dsh-embed', '');
+    document.documentElement.setAttribute('data-dsh-mode', mode);
     window.__DSH_EMBED__ = embed;
     window.__DSH_TRANSPORT__ = {
       // RpcFetch: the WebUI's RPC client hands us a document-relative route and
